@@ -6,7 +6,6 @@ import bcrypt
 import psycopg2
 import psycopg2.pool
 
-# --- Connection config (Heroku first) ---
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 if DATABASE_URL:
@@ -44,11 +43,9 @@ def get_db_connection():
 def put_db_connection(conn):
     POOL.putconn(conn)
 
-# --- Schema creation ---
 def init_database():
     conn = get_db_connection(); cur = conn.cursor()
 
-    # people / assistance
     cur.execute("""
         CREATE TABLE IF NOT EXISTS people (
             id SERIAL PRIMARY KEY,
@@ -71,7 +68,6 @@ def init_database():
         );
     """)
 
-    # users (auth)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -86,7 +82,6 @@ def init_database():
     conn.commit(); cur.close(); put_db_connection(conn)
 
 def ensure_default_admin():
-    """Create default admin if users table is empty."""
     conn = get_db_connection(); cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM users")
     count = (cur.fetchone() or [0])[0]
@@ -101,7 +96,6 @@ def ensure_default_admin():
         conn.commit()
     cur.close(); put_db_connection(conn)
 
-# --- Auth helpers ---
 def get_user_by_username(username: str):
     conn = get_db_connection(); cur = conn.cursor()
     cur.execute("SELECT id, username, password_hash, is_admin, is_active FROM users WHERE username=%s", (username,))
@@ -158,7 +152,28 @@ def set_user_password(user_id: int, new_password: str):
     cur.execute("UPDATE users SET password_hash=%s WHERE id=%s", (pwd_hash, user_id))
     conn.commit(); cur.close(); put_db_connection(conn)
 
-# --- People / Assistance ops ---
+def update_user(user_id: int, username: str = None, is_admin: bool = None):
+    sets = []; vals = []
+    if username is not None:
+        sets.append("username=%s"); vals.append(username)
+    if is_admin is not None:
+        sets.append("is_admin=%s"); vals.append(is_admin)
+    if not sets:
+        return False
+    vals.append(user_id)
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute(f"UPDATE users SET {', '.join(sets)} WHERE id=%s", vals)
+    conn.commit(); ok = cur.rowcount > 0
+    cur.close(); put_db_connection(conn)
+    return ok
+
+def delete_user(user_id: int):
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
+    conn.commit(); ok = cur.rowcount > 0
+    cur.close(); put_db_connection(conn)
+    return ok
+
 def get_person_by_document(document):
     conn = get_db_connection(); cur = conn.cursor()
     cur.execute("""
@@ -169,6 +184,21 @@ def get_person_by_document(document):
     if not row: return None
     cols = ["id","region","department","municipality","document","names","phone","email","position","entity"]
     return dict(zip(cols, row))
+
+def update_person(person_id: int, **fields):
+    allowed = {"region","department","municipality","document","names","phone","email","position","entity"}
+    sets = []; vals = []
+    for k, v in fields.items():
+        if k in allowed:
+            sets.append(f"{k}=%s"); vals.append(v)
+    if not sets:
+        return False
+    vals.append(person_id)
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute(f"UPDATE people SET {', '.join(sets)} WHERE id=%s", vals)
+    conn.commit(); ok = cur.rowcount > 0
+    cur.close(); put_db_connection(conn)
+    return ok
 
 def add_person(region, department, municipality, document, names, phone, email, position, entity):
     conn = get_db_connection(); cur = conn.cursor()

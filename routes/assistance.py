@@ -16,13 +16,11 @@ def render():
             st.session_state['last_doc'] = doc
     with c2:
         if st.button("Limpiar", use_container_width=True):
-            # Evita KeyError: usa pop con default
             st.session_state.pop('last_person', None)
             st.session_state.pop('last_doc', None)
             try:
                 st.rerun()
             except Exception:
-                # Compatibilidad con versiones antiguas
                 st.experimental_rerun()
 
     person = st.session_state.get('last_person')

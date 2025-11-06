@@ -5,8 +5,8 @@ headless = true
 toolbarMode = "minimal"
 
 [theme]
-primaryColor = "#3B82F6"              # pastel blue accent
-backgroundColor = "#F7FAFC"           # very light background
-secondaryBackgroundColor = "#E6F0FF"  # soft blue panel
-textColor = "#0F172A"                 # slate-900
+primaryColor = "#3B82F6"
+backgroundColor = "#F7FAFC"
+secondaryBackgroundColor = "#E6F0FF"
+textColor = "#0F172A"
 font = "sans serif"

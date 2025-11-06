@@ -1,11 +1,11 @@
 import streamlit as st
-from db import list_users, create_user, set_user_active, set_user_password
+from db import list_users, create_user, set_user_active, set_user_password, delete_user, update_user
 
 def render():
     st.subheader("Administración de Usuarios")
-    st.caption("Crear usuarios y gestionar estados.")
+    st.caption("Crear, editar, activar/inactivar y eliminar usuarios.")
 
-    with st.expander("➕ Crear usuario nuevo", expanded=True):
+    with st.expander("➕ Crear usuario nuevo", expanded=False):
         c1, c2 = st.columns(2)
         with c1:
             username = st.text_input("Usuario")
@@ -33,22 +33,41 @@ def render():
         return
 
     for u in users:
-        col1, col2, col3, col4 = st.columns([2,1,1,2])
+        st.write("---")
+        col1, col2, col3, col4, col5 = st.columns([2,1,1,2,2])
         with col1:
-            st.write(f"**{u['username']}** {'👑' if u['is_admin'] else ''}")
+            st.write(f"**{u['username']}** {'👑' if u['is_admin'] else ''}  ")
+            st.caption(f"ID: {u['id']} • Creado: {u['created_at']}")
         with col2:
             st.write("Activo" if u['is_active'] else "Inactivo")
         with col3:
-            if st.button("🔁 Toggle", key=f"tg{u['id']}"):
+            if st.button("🔁 Activar/Inactivar", key=f"tg{u['id']}"):
                 set_user_active(u['id'], not u['is_active'])
                 st.rerun()
         with col4:
-            with st.popover("Cambiar contraseña", use_container_width=True):
+            with st.popover("✏️ Editar usuario", use_container_width=True):
+                nu = st.text_input("Nuevo usuario", value=u['username'], key=f"nu{u['id']}")
+                na = st.checkbox("Es administrador", value=u['is_admin'], key=f"na{u['id']}")
+                if st.button("Guardar cambios", key=f"saveu{u['id']}"):
+                    ok = update_user(u['id'], username=nu, is_admin=na)
+                    if ok: st.success("Actualizado."); st.rerun()
+                    else: st.error("No se pudo actualizar.")
+        with col5:
+            with st.popover("🔒 Cambiar contraseña", use_container_width=True):
                 np1 = st.text_input(f"Nueva contraseña ({u['username']})", type="password", key=f"np1{u['id']}")
                 np2 = st.text_input("Repetir nueva contraseña", type="password", key=f"np2{u['id']}")
-                if st.button("Guardar", key=f"save{u['id']}"):
+                if st.button("Guardar", key=f"savep{u['id']}"):
                     if np1 and np1 == np2:
                         set_user_password(u['id'], np1)
                         st.success("Contraseña actualizada.")
                     else:
                         st.error("Las contraseñas no coinciden.")
+
+        # Eliminar (separado para evitar clics accidentales)
+        if st.button("🗑️ Eliminar usuario", key=f"del{u['id']}"):
+            if u['username'] == 'admin':
+                st.error("No puedes eliminar el usuario admin por defecto.")
+            else:
+                ok = delete_user(u['id'])
+                if ok: st.success("Eliminado."); st.rerun()
+                else: st.error("No se pudo eliminar.")
