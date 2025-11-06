@@ -1,11 +1,12 @@
 import os
 from urllib.parse import urlparse
 from datetime import datetime, timezone
+import bcrypt
 
-import pandas as pd
 import psycopg2
 import psycopg2.pool
 
+# --- Connection config (Heroku first) ---
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 if DATABASE_URL:
@@ -43,8 +44,11 @@ def get_db_connection():
 def put_db_connection(conn):
     POOL.putconn(conn)
 
+# --- Schema creation ---
 def init_database():
     conn = get_db_connection(); cur = conn.cursor()
+
+    # people / assistance
     cur.execute("""
         CREATE TABLE IF NOT EXISTS people (
             id SERIAL PRIMARY KEY,
@@ -58,20 +62,109 @@ def init_database():
             position VARCHAR(255),
             entity VARCHAR(255)
         );
-    """ )
+    """)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS assistance (
             id SERIAL PRIMARY KEY,
             person_id INT NOT NULL,
             timestamp_utc TIMESTAMP DEFAULT NOW()
         );
-    """ )
+    """)
+
+    # users (auth)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(100) UNIQUE NOT NULL,
+            password_hash VARCHAR(200) NOT NULL,
+            is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+    """)
+
     conn.commit(); cur.close(); put_db_connection(conn)
 
+def ensure_default_admin():
+    """Create default admin if users table is empty."""
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM users")
+    count = (cur.fetchone() or [0])[0]
+    if not count:
+        username = "admin"
+        password = "Admin2025!"
+        pwd_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        cur.execute(
+            "INSERT INTO users (username, password_hash, is_admin) VALUES (%s,%s,TRUE)",
+            (username, pwd_hash)
+        )
+        conn.commit()
+    cur.close(); put_db_connection(conn)
+
+# --- Auth helpers ---
+def get_user_by_username(username: str):
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("SELECT id, username, password_hash, is_admin, is_active FROM users WHERE username=%s", (username,))
+    row = cur.fetchone()
+    cur.close(); put_db_connection(conn)
+    if not row: return None
+    return {
+        "id": row[0],
+        "username": row[1],
+        "password_hash": row[2],
+        "is_admin": bool(row[3]),
+        "is_active": bool(row[4]),
+    }
+
+def create_user(username: str, password: str, is_admin: bool = False) -> bool:
+    if not username or not password:
+        return False
+    if get_user_by_username(username):
+        return False
+    pwd_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO users (username, password_hash, is_admin) VALUES (%s,%s,%s)",
+        (username, pwd_hash, is_admin)
+    )
+    conn.commit()
+    cur.close(); put_db_connection(conn)
+    return True
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except Exception:
+        return False
+
+def list_users():
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("SELECT id, username, is_admin, is_active, created_at FROM users ORDER BY username")
+    rows = cur.fetchall()
+    cur.close(); put_db_connection(conn)
+    return [
+        {"id": r[0], "username": r[1], "is_admin": bool(r[2]), "is_active": bool(r[3]), "created_at": r[4]}
+        for r in rows
+    ]
+
+def set_user_active(user_id: int, active: bool):
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("UPDATE users SET is_active=%s WHERE id=%s", (active, user_id))
+    conn.commit(); cur.close(); put_db_connection(conn)
+
+def set_user_password(user_id: int, new_password: str):
+    pwd_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("UPDATE users SET password_hash=%s WHERE id=%s", (pwd_hash, user_id))
+    conn.commit(); cur.close(); put_db_connection(conn)
+
+# --- People / Assistance ops ---
 def get_person_by_document(document):
     conn = get_db_connection(); cur = conn.cursor()
-    cur.execute("""SELECT id, region, department, municipality, document, names, phone, email, position, entity
-                    FROM people WHERE document=%s""", (str(document),))
+    cur.execute("""
+        SELECT id, region, department, municipality, document, names, phone, email, position, entity
+        FROM people WHERE document=%s
+    """, (str(document),))
     row = cur.fetchone(); cur.close(); put_db_connection(conn)
     if not row: return None
     cols = ["id","region","department","municipality","document","names","phone","email","position","entity"]
@@ -80,8 +173,9 @@ def get_person_by_document(document):
 def add_person(region, department, municipality, document, names, phone, email, position, entity):
     conn = get_db_connection(); cur = conn.cursor()
     try:
-        cur.execute("""INSERT INTO people (region, department, municipality, document, names, phone, email, position, entity)
-                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",                    (region, department, municipality, document, names, phone, email, position, entity))
+        cur.execute("""            INSERT INTO people (region, department, municipality, document, names, phone, email, position, entity)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+        """, (region, department, municipality, document, names, phone, email, position, entity))
         pid = cur.fetchone()[0]; conn.commit(); return pid
     except psycopg2.errors.UniqueViolation:
         conn.rollback()
@@ -93,14 +187,14 @@ def add_person(region, department, municipality, document, names, phone, email, 
 def add_assistance(person_id):
     now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     conn = get_db_connection(); cur = conn.cursor()
-    cur.execute("INSERT INTO assistance (person_id, timestamp_utc) VALUES (%s, %s) RETURNING id",                (person_id, now_utc))
+    cur.execute("INSERT INTO assistance (person_id, timestamp_utc) VALUES (%s, %s) RETURNING id",
+                (person_id, now_utc))
     aid = cur.fetchone()[0]; conn.commit(); cur.close(); put_db_connection(conn)
     return aid
 
 def get_all_people():
     conn = get_db_connection(); cur = conn.cursor()
-    cur.execute("""
-        SELECT p.*, la.last_ts AS last_assistance_utc
+    cur.execute("""        SELECT p.*, la.last_ts AS last_assistance_utc
         FROM people p
         LEFT JOIN (
             SELECT person_id, MAX(timestamp_utc) AS last_ts
@@ -109,19 +203,20 @@ def get_all_people():
         ) la ON p.id = la.person_id
         ORDER BY p.names
     """ )
-    rows = cur.fetchall(); cols = [d.name for d in cur.description]
+    rows = cur.fetchall()
+    cols = [d.name for d in cur.description]
     cur.close(); put_db_connection(conn)
     return [dict(zip(cols, r)) for r in rows]
 
 def get_all_assistances():
     conn = get_db_connection(); cur = conn.cursor()
-    cur.execute("""
-        SELECT a.id, p.names, p.document, a.timestamp_utc
+    cur.execute("""        SELECT a.id, p.names, p.document, a.timestamp_utc
         FROM assistance a
         JOIN people p ON a.person_id = p.id
         ORDER BY a.timestamp_utc DESC
     """ )
-    rows = cur.fetchall(); cols = [d.name for d in cur.description]
+    rows = cur.fetchall()
+    cols = [d.name for d in cur.description]
     cur.close(); put_db_connection(conn)
     return [dict(zip(cols, r)) for r in rows]
 

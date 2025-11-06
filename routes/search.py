@@ -3,7 +3,7 @@ from db import get_all_people
 import pandas as pd
 
 def render():
-    st.subheader("Buscar personas")
+    st.subheader("Buscar Personas")
     data = get_all_people()
     if not data:
         st.info("Sin registros todavía.")

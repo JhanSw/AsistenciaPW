@@ -1,21 +1,16 @@
-# Sistema de Asistencia — Streamlit en Heroku (Postgres)
+# Asistencia — Streamlit + Heroku Postgres + Login
 
-## Despliegue
-```bash
-heroku login
-git init
-heroku create asistencia-streamlit-uni
-heroku buildpacks:set heroku/python -a asistencia-streamlit-uni
-heroku addons:create heroku-postgresql:hobby-dev -a asistencia-streamlit-uni
+## Despliegue Heroku (UI)
+1. Conecta este repo a Heroku (Deploy → GitHub → Connect).
+2. Add-on: Resources → Add-ons → **Heroku Postgres (Hobby Dev)**.
+3. Manual deploy (Deploy → Manual deploy).
+4. More → Run console:
+   ```
+   python -c "from db import init_database; init_database(); from db import ensure_default_admin; ensure_default_admin(); print('OK')"
+   ```
+5. Open app → Login: **admin / Admin2025!** (cámbiala en módulo **Usuarios**).
 
-git add .
-git commit -m "deploy"
-git branch -M main
-git push heroku main
-
-# Crear tablas
-heroku run python -c "from db import init_database; init_database(); print('OK')" -a asistencia-streamlit-uni
-
-# Abrir
-heroku open -a asistencia-streamlit-uni
-```
+## Notas
+- Tema azul pastel en `.streamlit/config.toml`.
+- Botón **Limpiar** usa `st.rerun()` (fallback a `experimental_rerun`).
+- Módulo **Usuarios** solo visible para admin.

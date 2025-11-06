@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
-.streamlit/secrets.toml
 .env
+.streamlit/secrets.toml
+.vscode/
+.idea/

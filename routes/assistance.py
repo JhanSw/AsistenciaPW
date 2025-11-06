@@ -2,7 +2,7 @@ import streamlit as st
 from db import get_person_by_document, add_person, add_assistance
 
 def render():
-    st.subheader("Confirmación de asistencia")
+    st.subheader("Confirmación de Asistencia")
     doc = st.text_input("Documento de Identidad", key="doc_buscar")
 
     c1, c2 = st.columns([1,1])
@@ -16,9 +16,14 @@ def render():
             st.session_state['last_doc'] = doc
     with c2:
         if st.button("Limpiar", use_container_width=True):
+            # Evita KeyError: usa pop con default
             st.session_state.pop('last_person', None)
             st.session_state.pop('last_doc', None)
-            st.experimental_rerun()
+            try:
+                st.rerun()
+            except Exception:
+                # Compatibilidad con versiones antiguas
+                st.experimental_rerun()
 
     person = st.session_state.get('last_person')
     last_doc = st.session_state.get('last_doc', doc)

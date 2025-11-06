@@ -2,7 +2,7 @@ import streamlit as st
 from db import add_person
 
 def render():
-    st.subheader("Nuevo registro")
+    st.subheader("Nuevo Registro")
     with st.form("create_person"):
         region = st.text_input("Región")
         department = st.text_input("Departamento/Distrito")
