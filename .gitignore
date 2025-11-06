@@ -1,10 +1,5 @@
 __pycache__/
 *.pyc
 .venv/
-env/
-venv/
 .streamlit/secrets.toml
 .env
-.DS_Store
-.vscode/
-.idea/
