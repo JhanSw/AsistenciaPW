@@ -39,7 +39,7 @@ def login_form():
             else:
                 st.success("Bienvenido.")
                 st.rerun()
-    st.caption("Usuario admin por defecto: **admin** / **Admin2025!** (cámbiala luego).")
+    st.caption("Universidad Industrial de Santander")
 
 if not st.session_state.auth["logged"]:
     login_form()
