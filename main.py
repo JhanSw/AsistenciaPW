@@ -1,4 +1,3 @@
-
 import streamlit as st
 from db import init_database, ensure_default_admin
 from routes import assistance, search, create, users, import_people
@@ -39,7 +38,7 @@ if st.session_state["user"] is None:
         ok, info = do_login(u, p)
         if ok:
             st.session_state["user"] = info
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Usuario/contraseña inválidos o inactivo.")
     st.stop()
@@ -47,7 +46,7 @@ if st.session_state["user"] is None:
 st.sidebar.write(f"👤 {st.session_state['user']['username']}")
 if st.sidebar.button("Cerrar sesión"):
     st.session_state["user"] = None
-    st.experimental_rerun()
+    st.rerun()
 
 menu = ["Asistencia", "Buscar", "Nuevo"]
 if st.session_state["user"]["is_admin"]:
