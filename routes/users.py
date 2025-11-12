@@ -1,73 +1,57 @@
+
 import streamlit as st
-from db import list_users, create_user, set_user_active, set_user_password, delete_user, update_user
+from db import create_user, update_user, delete_user
 
-def render():
-    st.subheader("Administración de Usuarios")
-    st.caption("Crear, editar, activar/inactivar y eliminar usuarios.")
-
-    with st.expander("➕ Crear usuario nuevo", expanded=False):
-        c1, c2 = st.columns(2)
-        with c1:
-            username = st.text_input("Usuario")
-            pwd = st.text_input("Contraseña", type="password")
-        with c2:
-            pwd2 = st.text_input("Repetir Contraseña", type="password")
-            is_admin = st.checkbox("Es administrador", value=False)
-        if st.button("Crear usuario", type="primary"):
-            if not username or not pwd:
-                st.warning("Usuario y Contraseña son obligatorios.")
-            elif pwd != pwd2:
-                st.error("Las contraseñas no coinciden.")
-            else:
-                ok = create_user(username, pwd, is_admin=is_admin)
-                if ok:
-                    st.success("Usuario creado.")
-                else:
-                    st.error("No se pudo crear (¿ya existe?).")
-
-    st.divider()
-    st.markdown("### Usuarios actuales")
-    users = list_users()
-    if not users:
-        st.info("No hay usuarios.")
+def page():
+    if not st.session_state.get("is_admin"):
+        st.error("Solo administradores.")
         return
+    st.title("Usuarios")
 
-    for u in users:
-        st.write("---")
-        col1, col2, col3, col4, col5 = st.columns([2,1,1,2,2])
-        with col1:
-            st.write(f"**{u['username']}** {'👑' if u['is_admin'] else ''}  ")
-            st.caption(f"ID: {u['id']} • Creado: {u['created_at']}")
-        with col2:
-            st.write("Activo" if u['is_active'] else "Inactivo")
-        with col3:
-            if st.button("🔁 Activar/Inactivar", key=f"tg{u['id']}"):
-                set_user_active(u['id'], not u['is_active'])
-                st.rerun()
-        with col4:
-            with st.popover("✏️ Editar usuario", use_container_width=True):
-                nu = st.text_input("Nuevo usuario", value=u['username'], key=f"nu{u['id']}")
-                na = st.checkbox("Es administrador", value=u['is_admin'], key=f"na{u['id']}")
-                if st.button("Guardar cambios", key=f"saveu{u['id']}"):
-                    ok = update_user(u['id'], username=nu, is_admin=na)
-                    if ok: st.success("Actualizado."); st.rerun()
-                    else: st.error("No se pudo actualizar.")
-        with col5:
-            with st.popover("🔒 Cambiar contraseña", use_container_width=True):
-                np1 = st.text_input(f"Nueva contraseña ({u['username']})", type="password", key=f"np1{u['id']}")
-                np2 = st.text_input("Repetir nueva contraseña", type="password", key=f"np2{u['id']}")
-                if st.button("Guardar", key=f"savep{u['id']}"):
-                    if np1 and np1 == np2:
-                        set_user_password(u['id'], np1)
-                        st.success("Contraseña actualizada.")
-                    else:
-                        st.error("Las contraseñas no coinciden.")
+    st.subheader("Crear usuario")
+    with st.form("crear_user"):
+        u = st.text_input("Usuario *")
+        p = st.text_input("Contraseña *", type="password")
+        is_admin = st.checkbox("Admin", value=False)
+        active = st.checkbox("Activo", value=True)
+        sb = st.form_submit_button("Crear")
+    if sb:
+        if not u.strip() or not p.strip():
+            st.error("Usuario y contraseña obligatorios.")
+        else:
+            try:
+                uid = create_user(u.strip(), p.strip(), is_admin, active)
+                st.success(f"Usuario creado ID {uid}")
+            except Exception as e:
+                st.error(f"Error: {e}")
 
-        # Eliminar (separado para evitar clics accidentales)
-        if st.button("🗑️ Eliminar usuario", key=f"del{u['id']}"):
-            if u['username'] == 'admin':
-                st.error("No puedes eliminar el usuario admin por defecto.")
-            else:
-                ok = delete_user(u['id'])
-                if ok: st.success("Eliminado."); st.rerun()
-                else: st.error("No se pudo eliminar.")
+    st.subheader("Editar usuario existente")
+    with st.form("edit_user"):
+        uid = st.number_input("ID de usuario", min_value=1, step=1)
+        new_u = st.text_input("Nuevo usuario (opcional)")
+        new_p = st.text_input("Nueva contraseña (opcional)", type="password")
+        adm = st.selectbox("Admin", options=["","Sí","No"], index=0)
+        act = st.selectbox("Activo", options=["","Sí","No"], index=0)
+        sb2 = st.form_submit_button("Actualizar")
+    if sb2:
+        kwargs = {}
+        if new_u.strip(): kwargs["username"] = new_u.strip()
+        if new_p.strip(): kwargs["password"] = new_p.strip()
+        if adm != "": kwargs["is_admin"] = (adm == "Sí")
+        if act != "": kwargs["is_active"] = (act == "Sí")
+        try:
+            update_user(uid, **kwargs)
+            st.success("Actualizado.")
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+    st.subheader("Eliminar usuario")
+    with st.form("del_user"):
+        uid2 = st.number_input("ID a eliminar", min_value=1, step=1, key="delid")
+        sb3 = st.form_submit_button("Eliminar")
+    if sb3:
+        try:
+            delete_user(uid2)
+            st.success("Eliminado.")
+        except Exception as e:
+            st.error(f"Error: {e}")

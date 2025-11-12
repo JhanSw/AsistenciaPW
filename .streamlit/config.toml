@@ -1,12 +1,5 @@
-[server]
-headless = true
-
-[client]
-toolbarMode = "minimal"
-
 [theme]
-primaryColor = "#3B82F6"
-backgroundColor = "#F7FAFC"
-secondaryBackgroundColor = "#E6F0FF"
-textColor = "#0F172A"
-font = "sans serif"
+primaryColor="#3B82F6"
+backgroundColor="#F7FAFC"
+secondaryBackgroundColor="#E6F0FF"
+textColor="#0F172A"

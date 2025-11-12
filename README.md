@@ -1,18 +1,27 @@
-# Asistencia — Streamlit + Heroku Postgres + Login + CRUD
+# App de Confirmación de Asistencia (Streamlit + Postgres)
 
-## Novedades
-- Tema azul pastel.
-- Contador de resultados en Buscar.
-- Edición rápida por ID (municipio, depto, entidad, nombres).
-- CRUD de usuarios: crear, editar (usuario y admin), activar/inactivar, cambiar contraseña, eliminar.
-- Botón Limpiar corregido (usa `st.rerun()` con fallback).
+Incluye:
+- Autenticación con bcrypt (usuario por defecto: `admin` / `Admin2025!`)
+- Módulos: Asistencia, Buscar, Nuevo, Usuarios (admin), Importar (admin)
+- Filtros de búsqueda por Municipio / Provincia-Departamento / Entidad
+- Descarga a Excel (.xlsx)
+- Importar Excel con mapeo de columnas y upsert por Documento
+- 4 momentos de asistencia con selector global (solo admin):
+  - registro_dia1_manana
+  - registro_dia1_tarde
+  - registro_dia2_manana
+  - registro_dia2_tarde
 
-## Despliegue (Heroku UI)
-1. Conecta el repo a Heroku (Deploy → GitHub → Connect).
-2. Resources → Add-ons → **Heroku Postgres (Hobby Dev)**.
-3. Deploy → Manual deploy.
-4. More → Run console:
-   ```
-   python -c "from db import init_database; init_database(); from db import ensure_default_admin; ensure_default_admin(); print('OK')"
-   ```
-5. Open app → Login: **admin / Admin2025!** (cámbiala en **Usuarios**).
+## Ejecución local
+1. Crea una base de datos Postgres o configura `DATABASE_URL` en `.env`
+2. `pip install -r requirements.txt`
+3. `streamlit run main.py`
+
+## Inicialización DB / Admin
+
+```
+python -c "from db import init_database, ensure_default_admin; init_database(); ensure_default_admin(); print('OK')"
+```
+
+## Heroku
+- Procfile incluido; agrega Heroku Postgres como add-on.

@@ -1,54 +1,68 @@
+
 import streamlit as st
-from db import get_person_by_document, add_person, add_assistance
+from db import get_active_slot, set_active_slot, mark_attendance_for_slot, find_person_by_document, create_person
 
-def render():
-    st.subheader("Confirmación de Asistencia")
-    doc = st.text_input("Documento de Identidad", key="doc_buscar")
+def page():
+    st.title("Asistencia")
 
-    c1, c2 = st.columns([1,1])
-    with c1:
-        if st.button("Buscar", use_container_width=True):
-            if not doc:
-                st.warning("Ingresa un documento.")
-                st.stop()
-            person = get_person_by_document(doc)
-            st.session_state['last_person'] = person
-            st.session_state['last_doc'] = doc
-    with c2:
-        if st.button("Limpiar", use_container_width=True):
-            st.session_state.pop('last_person', None)
-            st.session_state.pop('last_doc', None)
-            try:
-                st.rerun()
-            except Exception:
-                st.experimental_rerun()
+    cols = st.columns([3,2])
+    with cols[1]:
+        if st.session_state.get("is_admin"):
+            current = get_active_slot()
+            labels = {
+                "registro_dia1_manana": "Día 1 - Mañana",
+                "registro_dia1_tarde": "Día 1 - Tarde",
+                "registro_dia2_manana": "Día 2 - Mañana",
+                "registro_dia2_tarde": "Día 2 - Tarde",
+            }
+            reverse = {v:k for k,v in labels.items()}
+            idx = list(labels.keys()).index(current)
+            choice = st.selectbox("Momento activo (global)", list(labels.values()), index=idx, key="active_slot")
+            if reverse[choice] != current:
+                set_active_slot(reverse[choice])
+                st.success(f"Momento activo cambiado a: {choice}")
 
-    person = st.session_state.get('last_person')
-    last_doc = st.session_state.get('last_doc', doc)
-
-    if person:
-        st.success("Registro encontrado")
-        st.write(f"**Departamento/Distrito:** {person.get('department','')}")
-        st.write(f"**Nombres:** {person.get('names','')}")
-        st.write(f"**Entidad:** {person.get('entity','')}")
-        if st.button("Confirmar asistencia ✅"):
-            add_assistance(person['id'])
-            st.success("Asistencia Confirmada")
-    elif last_doc:
-        st.info("No existe. Crear nuevo registro y confirmar:")
-        with st.form("nuevo_reg"):
-            department = st.text_input("Departamento/Distrito")
-            municipality = st.text_input("Municipio")
-            names = st.text_input("Nombres Completos")
-            phone = st.text_input("Teléfono")
-            email = st.text_input("Correo electrónico")
-            position = st.text_input("Cargo")
-            entity = st.text_input("Entidad")
-            submitted = st.form_submit_button("Guardar y Confirmar")
+    st.subheader("Confirmar asistencia por documento")
+    doc = st.text_input("Documento")
+    if st.button("Confirmar asistencia"):
+        if not doc.strip():
+            st.error("Ingrese un documento.")
+            return
+        doc_norm = doc.replace(".","").replace(" ","")
+        row = find_person_by_document(doc_norm)
+        if not row:
+            st.info("No existe, crea registro mínimo para confirmar.")
+            with st.form("crear_minimo"):
+                department = st.text_input("Provincia/Departamento")
+                municipality = st.text_input("Municipio")
+                names = st.text_input("Nombres y Apellidos *")
+                phone = st.text_input("Teléfono")
+                email = st.text_input("Email")
+                position = st.text_input("Cargo")
+                entity = st.text_input("Entidad")
+                submitted = st.form_submit_button("Crear y Marcar Asistencia")
             if submitted:
-                if not names:
-                    st.warning("Los Nombres son obligatorios")
-                else:
-                    pid = add_person("", department, municipality, last_doc, names, phone, email, position, entity)
-                    add_assistance(pid)
-                    st.success("Creado y asistencia confirmada")
+                if not names.strip():
+                    st.error("Nombres es obligatorio.")
+                    return
+                pid = create_person(
+                    region="",
+                    department=department.strip(),
+                    municipality=municipality.strip(),
+                    document=doc_norm,
+                    names=names.strip(),
+                    phone=phone.strip(),
+                    email=email.strip(),
+                    position=position.strip(),
+                    entity=entity.strip(),
+                )
+                from db import get_active_slot
+                slot = get_active_slot()
+                mark_attendance_for_slot(pid, slot)
+                st.success(f"Creado y marcado en **{slot.replace('_',' ').title()}**")
+        else:
+            person_id = row[0]
+            from db import get_active_slot
+            slot = get_active_slot()
+            mark_attendance_for_slot(person_id, slot)
+            st.success(f"Asistencia registrada en **{slot.replace('_',' ').title()}** para documento {doc_norm}.")

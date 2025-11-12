@@ -1,63 +1,69 @@
+
 import streamlit as st
-from db import init_database, ensure_default_admin, get_user_by_username, verify_password
-import importlib
+from db import init_database, ensure_default_admin
+from routes import assistance, search, create, users, import_people
+import bcrypt
 
-st.set_page_config(page_title="Asistencia", page_icon="✅", layout="wide")
+st.set_page_config(page_title="Asistencia", layout="wide")
 
-# Init DB and admin
-init_database()
-ensure_default_admin()
+if "db_init" not in st.session_state:
+    try:
+        init_database()
+        ensure_default_admin()
+    except Exception as e:
+        st.warning(f"No se pudo inicializar DB automáticamente: {e}")
+    st.session_state["db_init"] = True
 
-# ------------- Login gate -------------
-if "auth" not in st.session_state:
-    st.session_state.auth = {"logged": False, "user": None, "is_admin": False}
+from db import get_user
 
-def do_login(username, password):
-    u = get_user_by_username(username.strip())
-    if not u or not u["is_active"]:
-        return False, "Usuario no existe o está inactivo."
-    if not verify_password(password, u["password_hash"]):
-        return False, "Contraseña incorrecta."
-    st.session_state.auth = {"logged": True, "user": u["username"], "is_admin": u["is_admin"]}
-    return True, ""
+def do_login(user, pwd):
+    row = get_user(user)
+    if not row:
+        return False, None
+    _id, username, password_hash, is_admin, is_active = row
+    if not is_active:
+        return False, None
+    ok = bcrypt.checkpw(pwd.encode("utf-8"), password_hash.encode("utf-8"))
+    if not ok:
+        return False, None
+    return True, {"id": _id, "username": username, "is_admin": is_admin}
 
-def do_logout():
-    st.session_state.auth = {"logged": False, "user": None, "is_admin": False}
-    st.rerun()
+if "user" not in st.session_state:
+    st.session_state["user"] = None
 
-def login_form():
-    st.title("Sistema de Asistencia")
-    st.subheader("Iniciar Sesión")
-    with st.form("login_form", clear_on_submit=False):
-        u = st.text_input("Usuario")
-        p = st.text_input("Contraseña", type="password")
-        ok = st.form_submit_button("Entrar")
+if st.session_state["user"] is None:
+    st.title("Ingreso")
+    u = st.text_input("Usuario", value="")
+    p = st.text_input("Contraseña", type="password", value="")
+    if st.button("Entrar"):
+        ok, info = do_login(u, p)
         if ok:
-            okk, msg = do_login(u, p)
-            if not okk:
-                st.error(msg)
-            else:
-                st.success("Bienvenido.")
-                st.rerun()
-    st.caption("Universidad Industrial de Santander")
-
-if not st.session_state.auth["logged"]:
-    login_form()
+            st.session_state["user"] = info
+            st.experimental_rerun()
+        else:
+            st.error("Usuario/contraseña inválidos o inactivo.")
     st.stop()
 
-# ------------- App -------------
-st.sidebar.write(f"👤 {st.session_state.auth['user']}")
+st.sidebar.write(f"👤 {st.session_state['user']['username']}")
 if st.sidebar.button("Cerrar sesión"):
-    do_logout()
+    st.session_state["user"] = None
+    st.experimental_rerun()
 
-pages = {
-    "Asistencia": importlib.import_module("routes.assistance"),
-    "Buscar": importlib.import_module("routes.search"),
-    "Nuevo": importlib.import_module("routes.create"),
-}
-if st.session_state.auth["is_admin"]:
-    pages["Usuarios"] = importlib.import_module("routes.users")
+menu = ["Asistencia", "Buscar", "Nuevo"]
+if st.session_state["user"]["is_admin"]:
+    menu.extend(["Usuarios", "Importar"])
 
-st.title("Sistema de Asistencia")
-choice = st.sidebar.radio("Módulos", list(pages.keys()))
-pages[choice].render()
+choice = st.sidebar.selectbox("Menú", menu)
+
+st.session_state["is_admin"] = bool(st.session_state["user"]["is_admin"])
+
+if choice == "Asistencia":
+    assistance.page()
+elif choice == "Buscar":
+    search.page()
+elif choice == "Nuevo":
+    create.page()
+elif choice == "Usuarios":
+    users.page()
+elif choice == "Importar":
+    import_people.page()
