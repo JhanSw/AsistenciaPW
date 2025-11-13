@@ -1,4 +1,3 @@
-
 import streamlit as st
 from db import create_person
 

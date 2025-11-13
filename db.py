@@ -1,4 +1,3 @@
-
 import os
 import bcrypt
 import psycopg2
@@ -43,7 +42,6 @@ def init_database():
                 cur.execute("CREATE EXTENSION IF NOT EXISTS unaccent;")
             except Exception:
                 pass
-
             cur.execute("""
             CREATE TABLE IF NOT EXISTS people (
               id SERIAL PRIMARY KEY,
@@ -58,7 +56,6 @@ def init_database():
               entity VARCHAR(255)
             );
             """)
-
             cur.execute("""
             CREATE TABLE IF NOT EXISTS assistance (
               id SERIAL PRIMARY KEY,
@@ -67,7 +64,6 @@ def init_database():
               slot TEXT CHECK (slot IN ('registro_dia1_manana','registro_dia1_tarde','registro_dia2_manana','registro_dia2_tarde'))
             );
             """)
-
             cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
               id SERIAL PRIMARY KEY,
@@ -78,7 +74,6 @@ def init_database():
               created_at TIMESTAMP DEFAULT NOW()
             );
             """)
-
             cur.execute("""
             CREATE TABLE IF NOT EXISTS attendance_slots (
               person_id INT PRIMARY KEY REFERENCES people(id) ON DELETE CASCADE,
@@ -88,14 +83,12 @@ def init_database():
               registro_dia2_tarde  TIMESTAMP NULL
             );
             """)
-
             cur.execute("""
             CREATE TABLE IF NOT EXISTS settings (
               key TEXT PRIMARY KEY,
               value TEXT NOT NULL
             );
             """)
-
             cur.execute("""
             INSERT INTO settings(key, value)
             VALUES ('active_slot', 'registro_dia1_manana')
@@ -112,10 +105,7 @@ def ensure_default_admin():
                 username = "admin"
                 password = "Admin2025!"
                 hash_ = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-                cur.execute("""
-                INSERT INTO users (username, password_hash, is_admin, is_active)
-                VALUES (%s, %s, TRUE, TRUE);
-                """, (username, hash_))
+                cur.execute("INSERT INTO users (username, password_hash, is_admin, is_active) VALUES (%s, %s, TRUE, TRUE);", (username, hash_))
 
 def get_user(username):
     conn = get_connection()
@@ -128,28 +118,21 @@ def create_user(username, password, is_admin=False, is_active=True):
     with conn:
         with conn.cursor() as cur:
             hash_ = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-            cur.execute("""
-            INSERT INTO users (username, password_hash, is_admin, is_active)
-            VALUES (%s, %s, %s, %s) RETURNING id;
-            """, (username, hash_, is_admin, is_active))
+            cur.execute("INSERT INTO users (username, password_hash, is_admin, is_active) VALUES (%s, %s, %s, %s) RETURNING id;", (username, hash_, is_admin, is_active))
             return cur.fetchone()[0]
 
 def update_user(user_id, username=None, is_admin=None, is_active=None, password=None):
     sets = []
     params = []
     if username is not None:
-        sets.append("username=%s")
-        params.append(username)
+        sets.append("username=%s"); params.append(username)
     if is_admin is not None:
-        sets.append("is_admin=%s")
-        params.append(is_admin)
+        sets.append("is_admin=%s"); params.append(is_admin)
     if is_active is not None:
-        sets.append("is_active=%s")
-        params.append(is_active)
+        sets.append("is_active=%s"); params.append(is_active)
     if password is not None and password.strip():
         hash_ = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-        sets.append("password_hash=%s")
-        params.append(hash_)
+        sets.append("password_hash=%s"); params.append(hash_)
     if not sets:
         return
     params.append(user_id)
@@ -172,64 +155,48 @@ def delete_user(user_id):
 
 def search_people(q="", municipality="", department="", entity="", limit=500):
     conn = get_connection()
-    sql = """
-    SELECT id, region, department, municipality, document, names, phone, email, position, entity
-    FROM people
-    WHERE 1=1
-    """
+    sql = "SELECT id, region, department, municipality, document, names, phone, email, position, entity FROM people WHERE 1=1"
     params = []
     if q:
-        sql += " AND (unaccent(lower(names)) LIKE unaccent(lower(%s)) OR document ILIKE %s) "
-        like = f"%{q}%"
-        params.extend([like, like])
+        sql += " AND (unaccent(lower(names)) LIKE unaccent(lower(%s)) OR document ILIKE %s)"
+        like = f"%{q}%"; params.extend([like, like])
     if municipality:
-        sql += " AND unaccent(lower(municipality)) LIKE unaccent(lower(%s)) "
-        params.append(f"%{municipality}%")
+        sql += " AND unaccent(lower(municipality)) LIKE unaccent(lower(%s))"; params.append(f"%{municipality}%")
     if department:
-        sql += " AND unaccent(lower(department)) LIKE unaccent(lower(%s)) "
-        params.append(f"%{department}%")
+        sql += " AND unaccent(lower(department)) LIKE unaccent(lower(%s))"; params.append(f"%{department}%")
     if entity:
-        sql += " AND unaccent(lower(entity)) LIKE unaccent(lower(%s)) "
-        params.append(f"%{entity}%")
-    sql += " ORDER BY id DESC LIMIT %s"
-    params.append(limit)
-
+        sql += " AND unaccent(lower(entity)) LIKE unaccent(lower(%s))"; params.append(f"%{entity}%")
+    sql += " ORDER BY id DESC LIMIT %s"; params.append(limit)
     with conn.cursor() as cur:
         cur.execute(sql, params)
         rows = cur.fetchall()
         cols = [d[0] for d in cur.description]
+    import pandas as pd
     return pd.DataFrame(rows, columns=cols)
 
 def search_people_with_slots(q="", municipality="", department="", entity="", limit=500):
     conn = get_connection()
-    sql = """
-    SELECT p.id, p.region, p.department, p.municipality, p.document, p.names, p.phone, p.email, p.position, p.entity,
-           s.registro_dia1_manana, s.registro_dia1_tarde, s.registro_dia2_manana, s.registro_dia2_tarde
-    FROM people p
-    LEFT JOIN attendance_slots s ON s.person_id = p.id
-    WHERE 1=1
-    """
+    sql = """SELECT p.id, p.region, p.department, p.municipality, p.document, p.names, p.phone, p.email, p.position, p.entity,
+                    s.registro_dia1_manana, s.registro_dia1_tarde, s.registro_dia2_manana, s.registro_dia2_tarde
+             FROM people p
+             LEFT JOIN attendance_slots s ON s.person_id = p.id
+             WHERE 1=1"""
     params = []
     if q:
-        sql += " AND (unaccent(lower(p.names)) LIKE unaccent(lower(%s)) OR p.document ILIKE %s) "
-        like = f"%{q}%"
-        params.extend([like, like])
+        sql += " AND (unaccent(lower(p.names)) LIKE unaccent(lower(%s)) OR p.document ILIKE %s)"
+        like = f"%{q}%"; params.extend([like, like])
     if municipality:
-        sql += " AND unaccent(lower(p.municipality)) LIKE unaccent(lower(%s)) "
-        params.append(f"%{municipality}%")
+        sql += " AND unaccent(lower(p.municipality)) LIKE unaccent(lower(%s))"; params.append(f"%{municipality}%")
     if department:
-        sql += " AND unaccent(lower(p.department)) LIKE unaccent(lower(%s)) "
-        params.append(f"%{department}%")
+        sql += " AND unaccent(lower(p.department)) LIKE unaccent(lower(%s))"; params.append(f"%{department}%")
     if entity:
-        sql += " AND unaccent(lower(p.entity)) LIKE unaccent(lower(%s)) "
-        params.append(f"%{entity}%")
-    sql += " ORDER BY p.id DESC LIMIT %s"
-    params.append(limit)
-
+        sql += " AND unaccent(lower(p.entity)) LIKE unaccent(lower(%s))"; params.append(f"%{entity}%")
+    sql += " ORDER BY p.id DESC LIMIT %s"; params.append(limit)
     with conn.cursor() as cur:
         cur.execute(sql, params)
         rows = cur.fetchall()
         cols = [d[0] for d in cur.description]
+    import pandas as pd
     return pd.DataFrame(rows, columns=cols)
 
 UPSERT_PEOPLE_SQL = """
@@ -269,19 +236,13 @@ def set_active_slot(slot: str):
     conn = get_connection()
     with conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO settings(key, value) VALUES ('active_slot', %s)
-                ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value
-            """, (slot,))
+            cur.execute("INSERT INTO settings(key, value) VALUES ('active_slot', %s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (slot,))
 
 def ensure_attendance_slots(person_id: int):
     conn = get_connection()
     with conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO attendance_slots(person_id) VALUES (%s)
-                ON CONFLICT (person_id) DO NOTHING
-            """, (person_id,))
+            cur.execute("INSERT INTO attendance_slots(person_id) VALUES (%s) ON CONFLICT (person_id) DO NOTHING", (person_id,))
 
 def mark_attendance_for_slot(person_id: int, slot: str):
     if slot not in SLOTS:
@@ -289,24 +250,14 @@ def mark_attendance_for_slot(person_id: int, slot: str):
     conn = get_connection()
     with conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO assistance (person_id, slot) VALUES (%s, %s)
-                RETURNING id
-            """, (person_id, slot))
+            cur.execute("INSERT INTO assistance (person_id, slot) VALUES (%s, %s) RETURNING id", (person_id, slot))
             ensure_attendance_slots(person_id)
-            cur.execute(f"""
-                UPDATE attendance_slots
-                SET {slot} = COALESCE({slot}, NOW())
-                WHERE person_id = %s
-            """, (person_id,))
+            cur.execute(f"UPDATE attendance_slots SET {slot} = COALESCE({slot}, NOW()) WHERE person_id = %s", (person_id,))
 
 def find_person_by_document(document: str):
     conn = get_connection()
     with conn.cursor() as cur:
-        cur.execute("""
-        SELECT id, region, department, municipality, document, names, phone, email, position, entity
-        FROM people WHERE document=%s
-        """, (document,))
+        cur.execute("SELECT id, region, department, municipality, document, names, phone, email, position, entity FROM people WHERE document=%s", (document,))
         return cur.fetchone()
 
 def create_person(**kwargs):

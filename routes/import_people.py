@@ -1,21 +1,17 @@
-
 import streamlit as st
 import pandas as pd
 from db import upsert_people_bulk
 
-REQUIRED = ["document", "names"]
 TARGET = ["region","department","municipality","document","names","phone","email","position","entity"]
 
 def _norm_text(x):
     if pd.isna(x): return ""
-    x = str(x).strip()
-    x = x.replace("\u00a0"," ")
+    x = str(x).strip().replace("\u00a0"," ")
     return x
 
 def _norm_document(x):
     x = _norm_text(x)
-    x = x.replace(".","").replace(" ","")
-    return x
+    return x.replace(".","").replace(" ","")
 
 def _valid_email(x):
     if not x: return True
@@ -40,7 +36,6 @@ def page():
         return
 
     st.title("Importar personas")
-
     up = st.file_uploader("Archivo Excel (.xlsx)", type=["xlsx"])
     if not up:
         st.info("Sube un archivo para continuar.")
@@ -54,11 +49,8 @@ def page():
     map_dest = {}
     for c in df.columns:
         opts = [""] + TARGET
-        try:
-            idx = opts.index(guess(c))
-        except Exception:
-            idx = 0
-        map_dest[c] = st.selectbox(f"Destino para: **{c}**", options=opts, index=idx, key=f"map_{c}")
+        gi = opts.index(guess(c)) if guess(c) in opts else 0
+        map_dest[c] = st.selectbox(f"Destino para: **{c}**", options=opts, index=gi, key=f"map_{c}")
 
     tmp = {}
     for dest in TARGET:
