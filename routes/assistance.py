@@ -1,5 +1,5 @@
 import streamlit as st
-from db import get_active_slot, set_active_slot, mark_attendance_for_slot, find_person_by_document, create_person, get_attendance_status, clear_attendance_slot
+from db import get_active_slot, set_active_slot, mark_attendance_for_slot, find_person_by_document, create_person, get_attendance_status, clear_attendance_slot, log_action
 
 def _labels(person_row):
     # row: id, region, department, municipality, document, names, phone, email, position, entity
@@ -68,6 +68,8 @@ def page():
             slot = get_active_slot()
             mark_attendance_for_slot(p["id"], slot)
             st.success(f"Asistencia registrada en **{slot.replace('_',' ').title()}** para documento {p['document']}.")
+            user = st.session_state.get('user') or {}
+            log_action(user.get('id'), user.get('username'), 'confirm_attendance', person_id=p['id'], slot=slot)
 
         st.markdown("---")
         st.markdown("#### Estado de registros")
@@ -86,6 +88,8 @@ def page():
                 if st.session_state.get("is_admin") and status.get(key):
                     if st.button(f"Borrar {i+1}", key=f"del_{key}"):
                         clear_attendance_slot(p["id"], key)
+                        user = st.session_state.get('user') or {}
+                        log_action(user.get('id'), user.get('username'), 'clear_attendance', person_id=p['id'], slot=key)
                         st.success("Registro borrado.")
                         st.rerun()
 
@@ -121,3 +125,6 @@ def page():
             slot = get_active_slot()
             mark_attendance_for_slot(pid, slot)
             st.success(f"Creado y marcado en **{slot.replace('_',' ').title()}**")
+            user = st.session_state.get('user') or {}
+            log_action(user.get('id'), user.get('username'), 'create_person', person_id=pid)
+            log_action(user.get('id'), user.get('username'), 'confirm_attendance', person_id=pid, slot=slot)

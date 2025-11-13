@@ -1,5 +1,5 @@
 import streamlit as st
-from db import list_users, create_user, update_user, delete_user
+from db import list_users, create_user, update_user, delete_user, log_action
 
 def page():
     if not st.session_state.get("is_admin"):
@@ -26,6 +26,8 @@ def page():
                 try:
                     uid = create_user(u.strip(), p.strip(), is_admin, active)
                     st.success(f"Usuario creado ID {uid}")
+                    curuser = st.session_state.get('user') or {}
+                    log_action(curuser.get('id'), curuser.get('username'), 'create_user', details={'created_id': uid, 'username': u.strip(), 'is_admin': is_admin, 'active': active})
                 except Exception as e:
                     st.error(f"Error: {e}")
 
@@ -56,6 +58,8 @@ def page():
                             is_active=act,
                             password=new_p.strip() if new_p.strip() else None)
                 st.success("Actualizado.")
+                curuser = st.session_state.get('user') or {}
+                log_action(curuser.get('id'), curuser.get('username'), 'update_user', details={'user_id': uid})
                 st.session_state["editing_user"] = None
                 st.session_state["editing_snapshot"] = None
                 st.rerun()
@@ -69,6 +73,8 @@ def page():
             try:
                 delete_user(uid)
                 st.success("Eliminado.")
+                curuser = st.session_state.get('user') or {}
+                log_action(curuser.get('id'), curuser.get('username'), 'delete_user', details={'user_id': uid})
                 st.session_state["editing_user"] = None
                 st.session_state["editing_snapshot"] = None
                 st.rerun()

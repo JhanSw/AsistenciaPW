@@ -1,6 +1,6 @@
 import streamlit as st
-from db import init_database, ensure_default_admin
-from routes import assistance, search, create, users, import_people
+from db import init_database, ensure_default_admin, ensure_audit_table
+from routes import assistance, search, create, users, import_people, audit
 import bcrypt
 
 st.set_page_config(page_title="Asistencia", layout="wide")
@@ -8,7 +8,7 @@ st.set_page_config(page_title="Asistencia", layout="wide")
 if "db_init" not in st.session_state:
     try:
         init_database()
-        ensure_default_admin()
+        ensure_default_admin(); ensure_audit_table()
     except Exception as e:
         st.warning(f"No se pudo inicializar DB automáticamente: {e}")
     st.session_state["db_init"] = True
@@ -50,7 +50,7 @@ if st.sidebar.button("Cerrar sesión"):
 
 menu = ["Asistencia", "Buscar", "Nuevo"]
 if st.session_state["user"]["is_admin"]:
-    menu.extend(["Usuarios", "Importar"])
+    menu.extend(["Usuarios", "Importar", "Auditoría"])
 
 choice = st.sidebar.selectbox("Menú", menu)
 
@@ -66,3 +66,5 @@ elif choice == "Usuarios":
     users.page()
 elif choice == "Importar":
     import_people.page()
+elif choice == "Auditoría":
+    audit.page()

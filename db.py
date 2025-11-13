@@ -35,6 +35,8 @@ def get_connection():
         )
 
 def init_database():
+    # (patched to also ensure audit table)
+
     conn = get_connection()
     with conn:
         with conn.cursor() as cur:
@@ -303,3 +305,34 @@ def clear_attendance_slot(person_id: int, slot: str):
             # limpiar la marca agregada en tabla de acumulado
             cur.execute(f"UPDATE attendance_slots SET {slot} = NULL WHERE person_id=%s", (person_id,))
             return cur.rowcount
+
+# === Auditoría ===
+def init_audit(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id SERIAL PRIMARY KEY,
+            timestamp_utc TIMESTAMP DEFAULT NOW(),
+            user_id INT,
+            username TEXT,
+            action TEXT NOT NULL,
+            person_id INT,
+            slot TEXT,
+            details JSONB
+        );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp_utc DESC);")
+
+def log_action(user_id, username, action, person_id=None, slot=None, details=None):
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO audit_log(user_id, username, action, person_id, slot, details) VALUES (%s,%s,%s,%s,%s,%s)",
+                (user_id, username, action, person_id, slot, psycopg2.extras.Json(details) if details is not None else None)
+            )
+
+def ensure_audit_table():
+    conn = get_connection()
+    with conn:
+        init_audit(conn)
