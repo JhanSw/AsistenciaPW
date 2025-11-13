@@ -42,6 +42,7 @@ def init_database():
                 cur.execute("CREATE EXTENSION IF NOT EXISTS unaccent;")
             except Exception:
                 pass
+
             cur.execute("""
             CREATE TABLE IF NOT EXISTS people (
               id SERIAL PRIMARY KEY,
@@ -54,16 +55,31 @@ def init_database():
               email VARCHAR(255),
               position VARCHAR(255),
               entity VARCHAR(255)
-            );
-            """)
+            );""")
+
             cur.execute("""
             CREATE TABLE IF NOT EXISTS assistance (
               id SERIAL PRIMARY KEY,
               person_id INT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
-              timestamp_utc TIMESTAMP DEFAULT NOW(),
-              slot TEXT CHECK (slot IN ('registro_dia1_manana','registro_dia1_tarde','registro_dia2_manana','registro_dia2_tarde'))
-            );
+              timestamp_utc TIMESTAMP DEFAULT NOW()
+            );""")
+
+            # Add slot column if missing
+            cur.execute("""
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='assistance' AND column_name='slot'
+              ) THEN
+                ALTER TABLE assistance
+                  ADD COLUMN slot TEXT,
+                  ADD CONSTRAINT assistance_slot_check
+                    CHECK (slot IN ('registro_dia1_manana','registro_dia1_tarde','registro_dia2_manana','registro_dia2_tarde'));
+              END IF;
+            END$$;
             """)
+
             cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
               id SERIAL PRIMARY KEY,
@@ -72,8 +88,8 @@ def init_database():
               is_admin BOOLEAN NOT NULL DEFAULT FALSE,
               is_active BOOLEAN NOT NULL DEFAULT TRUE,
               created_at TIMESTAMP DEFAULT NOW()
-            );
-            """)
+            );""")
+
             cur.execute("""
             CREATE TABLE IF NOT EXISTS attendance_slots (
               person_id INT PRIMARY KEY REFERENCES people(id) ON DELETE CASCADE,
@@ -81,19 +97,18 @@ def init_database():
               registro_dia1_tarde  TIMESTAMP NULL,
               registro_dia2_manana TIMESTAMP NULL,
               registro_dia2_tarde  TIMESTAMP NULL
-            );
-            """)
+            );""")
+
             cur.execute("""
             CREATE TABLE IF NOT EXISTS settings (
               key TEXT PRIMARY KEY,
               value TEXT NOT NULL
-            );
-            """)
+            );""")
+
             cur.execute("""
             INSERT INTO settings(key, value)
             VALUES ('active_slot', 'registro_dia1_manana')
-            ON CONFLICT (key) DO NOTHING;
-            """)
+            ON CONFLICT (key) DO NOTHING;""")
 
 def ensure_default_admin():
     conn = get_connection()
@@ -112,6 +127,12 @@ def get_user(username):
     with conn.cursor() as cur:
         cur.execute("SELECT id, username, password_hash, is_admin, is_active FROM users WHERE username=%s", (username,))
         return cur.fetchone()
+
+def list_users():
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, username, is_admin, is_active, created_at FROM users ORDER BY id ASC")
+        return cur.fetchall()
 
 def create_user(username, password, is_admin=False, is_active=True):
     conn = get_connection()
@@ -153,27 +174,6 @@ def delete_user(user_id):
                 raise ValueError("No se puede eliminar el usuario por defecto 'admin'.")
             cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
 
-def search_people(q="", municipality="", department="", entity="", limit=500):
-    conn = get_connection()
-    sql = "SELECT id, region, department, municipality, document, names, phone, email, position, entity FROM people WHERE 1=1"
-    params = []
-    if q:
-        sql += " AND (unaccent(lower(names)) LIKE unaccent(lower(%s)) OR document ILIKE %s)"
-        like = f"%{q}%"; params.extend([like, like])
-    if municipality:
-        sql += " AND unaccent(lower(municipality)) LIKE unaccent(lower(%s))"; params.append(f"%{municipality}%")
-    if department:
-        sql += " AND unaccent(lower(department)) LIKE unaccent(lower(%s))"; params.append(f"%{department}%")
-    if entity:
-        sql += " AND unaccent(lower(entity)) LIKE unaccent(lower(%s))"; params.append(f"%{entity}%")
-    sql += " ORDER BY id DESC LIMIT %s"; params.append(limit)
-    with conn.cursor() as cur:
-        cur.execute(sql, params)
-        rows = cur.fetchall()
-        cols = [d[0] for d in cur.description]
-    import pandas as pd
-    return pd.DataFrame(rows, columns=cols)
-
 def search_people_with_slots(q="", municipality="", department="", entity="", limit=500):
     conn = get_connection()
     sql = """SELECT p.id, p.region, p.department, p.municipality, p.document, p.names, p.phone, p.email, p.position, p.entity,
@@ -196,7 +196,6 @@ def search_people_with_slots(q="", municipality="", department="", entity="", li
         cur.execute(sql, params)
         rows = cur.fetchall()
         cols = [d[0] for d in cur.description]
-    import pandas as pd
     return pd.DataFrame(rows, columns=cols)
 
 UPSERT_PEOPLE_SQL = """
