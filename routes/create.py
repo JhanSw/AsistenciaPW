@@ -4,13 +4,13 @@ from db import create_person
 def page():
     st.title("Nuevo registro")
     with st.form("nuevo_reg"):
-        region = st.text_input("Región")
-        department = st.text_input("Provincia/Departamento")
+        region = st.text_input("Región (Provincia)")
+        department = st.text_input("Departamento")
         municipality = st.text_input("Municipio")
         document = st.text_input("Documento *")
-        names = st.text_input("Nombres y Apellidos *")
-        phone = st.text_input("Teléfono")
-        email = st.text_input("Email")
+        names = st.text_input("Nombre completo *")
+        phone = st.text_input("Celular")
+        email = st.text_input("Correo electrónico")
         position = st.text_input("Cargo")
         entity = st.text_input("Entidad")
 

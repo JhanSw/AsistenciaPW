@@ -174,7 +174,19 @@ def delete_user(user_id):
                 raise ValueError("No se puede eliminar el usuario por defecto 'admin'.")
             cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
 
-def search_people_with_slots(q="", municipality="", department="", entity="", limit=500):
+# === Distinct values for dropdowns ===
+def distinct_values(column):
+    assert column in ("region","department","municipality","entity")
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT DISTINCT {column} FROM people WHERE {column} IS NOT NULL AND {column}<>'' ORDER BY {column}")
+        return [r[0] for r in cur.fetchall()]
+
+# === Search with multi-filters (region/municipality/entity) ===
+def search_people_with_slots(q="", regions=None, municipalities=None, entities=None, limit=1000):
+    regions = regions or []
+    municipalities = municipalities or []
+    entities = entities or []
     conn = get_connection()
     sql = """SELECT p.id, p.region, p.department, p.municipality, p.document, p.names, p.phone, p.email, p.position, p.entity,
                     s.registro_dia1_manana, s.registro_dia1_tarde, s.registro_dia2_manana, s.registro_dia2_tarde
@@ -185,12 +197,12 @@ def search_people_with_slots(q="", municipality="", department="", entity="", li
     if q:
         sql += " AND (unaccent(lower(p.names)) LIKE unaccent(lower(%s)) OR p.document ILIKE %s)"
         like = f"%{q}%"; params.extend([like, like])
-    if municipality:
-        sql += " AND unaccent(lower(p.municipality)) LIKE unaccent(lower(%s))"; params.append(f"%{municipality}%")
-    if department:
-        sql += " AND unaccent(lower(p.department)) LIKE unaccent(lower(%s))"; params.append(f"%{department}%")
-    if entity:
-        sql += " AND unaccent(lower(p.entity)) LIKE unaccent(lower(%s))"; params.append(f"%{entity}%")
+    if regions:
+        sql += " AND p.region = ANY(%s)"; params.append(regions)
+    if municipalities:
+        sql += " AND p.municipality = ANY(%s)"; params.append(municipalities)
+    if entities:
+        sql += " AND p.entity = ANY(%s)"; params.append(entities)
     sql += " ORDER BY p.id DESC LIMIT %s"; params.append(limit)
     with conn.cursor() as cur:
         cur.execute(sql, params)

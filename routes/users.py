@@ -8,6 +8,10 @@ def page():
 
     st.title("Usuarios")
 
+    # Estado para editor inline
+    st.session_state.setdefault("editing_user", None)
+    st.session_state.setdefault("editing_snapshot", None)
+
     with st.expander("➕ Crear usuario"):
         with st.form("crear_user"):
             u = st.text_input("Usuario *")
@@ -31,6 +35,49 @@ def page():
         st.info("No hay usuarios.")
         return
 
+    # Si hay un usuario en edición, mostrar editor arriba
+    if st.session_state["editing_user"] is not None and st.session_state["editing_snapshot"] is not None:
+        uid, username, is_admin, is_active = st.session_state["editing_snapshot"]
+        st.markdown(f"### Editar usuario #{uid}")
+        with st.form("edit_inline"):
+            new_u = st.text_input("Usuario", value=username)
+            new_p = st.text_input("Nueva contraseña (opcional)", type="password")
+            adm = st.checkbox("Es administrador", value=bool(is_admin))
+            act = st.checkbox("Activo", value=bool(is_active))
+            c1, c2, c3 = st.columns(3)
+            save = c1.form_submit_button("Guardar cambios")
+            cancel = c2.form_submit_button("Cancelar")
+            delete = c3.form_submit_button("Eliminar usuario", disabled=(username == "admin"))
+        if save:
+            try:
+                update_user(uid,
+                            username=new_u.strip() if new_u.strip() else username,
+                            is_admin=adm,
+                            is_active=act,
+                            password=new_p.strip() if new_p.strip() else None)
+                st.success("Actualizado.")
+                st.session_state["editing_user"] = None
+                st.session_state["editing_snapshot"] = None
+                st.experimental_rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+        elif cancel:
+            st.session_state["editing_user"] = None
+            st.session_state["editing_snapshot"] = None
+            st.experimental_rerun()
+        elif delete:
+            try:
+                delete_user(uid)
+                st.success("Eliminado.")
+                st.session_state["editing_user"] = None
+                st.session_state["editing_snapshot"] = None
+                st.experimental_rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+        st.markdown("---")
+
+    # Render filas con botón Editar (abre editor inline)
     for (uid, username, is_admin, is_active, created_at) in data:
         cols = st.columns([3,2,2,2,2])
         cols[0].markdown(f"**{uid} – {username}**")
@@ -38,36 +85,6 @@ def page():
         cols[2].write("Activo ✅" if is_active else "Activo ❌")
         cols[3].write(str(created_at) if created_at else "-")
         if cols[4].button("Editar", key=f"edit_{uid}"):
-            with st.modal(f"Editar usuario #{uid}"):
-                st.markdown(f"**ID:** {uid}")
-                new_u = st.text_input("Usuario", value=username, key=f"u_{uid}")
-                new_p = st.text_input("Nueva contraseña (opcional)", type="password", key=f"p_{uid}")
-                adm = st.checkbox("Es administrador", value=bool(is_admin), key=f"a_{uid}")
-                act = st.checkbox("Activo", value=bool(is_active), key=f"ac_{uid}")
-                c1, c2, c3 = st.columns(3)
-                save = c1.button("Guardar cambios", key=f"save_{uid}")
-                if username != "admin":
-                    del_ok = c2.button("Eliminar usuario", key=f"del_{uid}")
-                else:
-                    del_ok = False
-                    c2.write("No se puede eliminar 'admin'")
-
-                if save:
-                    try:
-                        update_user(uid,
-                                    username=new_u.strip() if new_u.strip() else username,
-                                    is_admin=adm,
-                                    is_active=act,
-                                    password=new_p.strip() if new_p.strip() else None)
-                        st.success("Actualizado.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
-                if del_ok:
-                    try:
-                        delete_user(uid)
-                        st.success("Eliminado.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+            st.session_state["editing_user"] = uid
+            st.session_state["editing_snapshot"] = (uid, username, is_admin, is_active)
+            st.experimental_rerun()

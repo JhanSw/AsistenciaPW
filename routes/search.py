@@ -1,28 +1,63 @@
 import streamlit as st
 import pandas as pd
 import io
-from db import search_people_with_slots
+from db import search_people_with_slots, distinct_values
+
+LABELS = {
+    "id": "Número",
+    "region": "Provincia",
+    "department": "Departamento",
+    "municipality": "Municipio",
+    "document": "Documento",
+    "names": "Nombre completo",
+    "phone": "Celular",
+    "email": "Correo electrónico",
+    "position": "Cargo",
+    "entity": "Entidad",
+    "registro_dia1_manana": "Registro mañana día 1.",
+    "registro_dia1_tarde": "Registro tarde día 1.",
+    "registro_dia2_manana": "Registro mañana día 2.",
+    "registro_dia2_tarde": "Registro tarde día 2.",
+}
+
+ORDER = ["id","region","department","municipality","document","names","phone","email","position","entity",
+         "registro_dia1_manana","registro_dia1_tarde","registro_dia2_manana","registro_dia2_tarde"]
 
 def page():
     st.title("Buscar")
 
-    col1, col2, col3, col4 = st.columns([2,2,2,2])
-    with col1:
-        q_text = st.text_input("Nombre o Documento", value="")
-    with col2:
-        f_municipio = st.text_input("Municipio", value="")
-    with col3:
-        f_departamento = st.text_input("Provincia/Departamento", value="")
-    with col4:
-        f_entidad = st.text_input("Entidad", value="")
+    # Text search still allowed (by nombre/documento)
+    q_text = st.text_input("Buscar por nombre o documento", value="")
 
+    # Dropdown options from DB
+    regiones = distinct_values("region")
+    municipios = distinct_values("municipality")
+    entidades = distinct_values("entity")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        sel_region = st.multiselect("Provincia (region)", opciones:=regiones)
+    with c2:
+        sel_muni = st.multiselect("Municipio", opciones:=municipios)
+    with c3:
+        sel_ent = st.multiselect("Entidad", opciones:=entidades)
+
+    # Query
     df = search_people_with_slots(
         q=q_text.strip(),
-        municipality=f_municipio.strip(),
-        department=f_departamento.strip(),
-        entity=f_entidad.strip(),
+        regions=sel_region,
+        municipalities=sel_muni,
+        entities=sel_ent,
         limit=1000
     )
+
+    # Reorder and relabel
+    for col in ORDER:
+        if col not in df.columns:
+            df[col] = None
+    df = df[ORDER]
+
+    df = df.rename(columns=LABELS)
 
     st.write(f"Se encontraron **{len(df)}** registros.")
     st.dataframe(df)
