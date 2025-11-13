@@ -58,20 +58,20 @@ def page():
                 st.success("Actualizado.")
                 st.session_state["editing_user"] = None
                 st.session_state["editing_snapshot"] = None
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
         elif cancel:
             st.session_state["editing_user"] = None
             st.session_state["editing_snapshot"] = None
-            st.experimental_rerun()
+            st.rerun()
         elif delete:
             try:
                 delete_user(uid)
                 st.success("Eliminado.")
                 st.session_state["editing_user"] = None
                 st.session_state["editing_snapshot"] = None
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -87,4 +87,4 @@ def page():
         if cols[4].button("Editar", key=f"edit_{uid}"):
             st.session_state["editing_user"] = uid
             st.session_state["editing_snapshot"] = (uid, username, is_admin, is_active)
-            st.experimental_rerun()
+            st.rerun()

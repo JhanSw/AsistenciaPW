@@ -36,11 +36,11 @@ def page():
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        sel_region = st.multiselect("Provincia (region)", opciones:=regiones)
+        sel_region = st.multiselect("Provincia (region)", regiones)
     with c2:
-        sel_muni = st.multiselect("Municipio", opciones:=municipios)
+        sel_muni = st.multiselect("Municipio", municipios)
     with c3:
-        sel_ent = st.multiselect("Entidad", opciones:=entidades)
+        sel_ent = st.multiselect("Entidad", entidades)
 
     # Query
     df = search_people_with_slots(

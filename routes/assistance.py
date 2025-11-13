@@ -1,5 +1,5 @@
 import streamlit as st
-from db import get_active_slot, set_active_slot, mark_attendance_for_slot, find_person_by_document, create_person
+from db import get_active_slot, set_active_slot, mark_attendance_for_slot, find_person_by_document, create_person, get_attendance_status, clear_attendance_slot
 
 def _labels(person_row):
     # row: id, region, department, municipality, document, names, phone, email, position, entity
@@ -68,6 +68,26 @@ def page():
             slot = get_active_slot()
             mark_attendance_for_slot(p["id"], slot)
             st.success(f"Asistencia registrada en **{slot.replace('_',' ').title()}** para documento {p['document']}.")
+
+        st.markdown("---")
+        st.markdown("#### Estado de registros")
+        status = get_attendance_status(p["id"])  # dict por slot -> timestamp
+        pretty = {
+            "registro_dia1_manana": "Registro mañana día 1.",
+            "registro_dia1_tarde":  "Registro tarde día 1.",
+            "registro_dia2_manana": "Registro mañana día 2.",
+            "registro_dia2_tarde":  "Registro tarde día 2.",
+        }
+        cols = st.columns(4)
+        for i, key in enumerate(["registro_dia1_manana","registro_dia1_tarde","registro_dia2_manana","registro_dia2_tarde"]):
+            with cols[i]:
+                st.caption(pretty[key])
+                st.write(str(status.get(key)) if status.get(key) else "—")
+                if st.session_state.get("is_admin") and status.get(key):
+                    if st.button(f"Borrar {i+1}", key=f"del_{key}"):
+                        clear_attendance_slot(p["id"], key)
+                        st.success("Registro borrado.")
+                        st.rerun()
 
     st.markdown("---")
     st.subheader("Crear nuevo y confirmar")

@@ -281,3 +281,25 @@ def create_person(**kwargs):
         with conn.cursor() as cur:
             cur.execute(f"INSERT INTO people ({cols}) VALUES ({placeholders}) RETURNING id;", vals)
             return cur.fetchone()[0]
+
+def get_attendance_status(person_id: int):
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT registro_dia1_manana, registro_dia1_tarde, registro_dia2_manana, registro_dia2_tarde FROM attendance_slots WHERE person_id=%s", (person_id,))
+        row = cur.fetchone()
+    if not row:
+        return {k: None for k in SLOTS}
+    keys = SLOTS
+    return dict(zip(keys, row))
+
+def clear_attendance_slot(person_id: int, slot: str):
+    if slot not in SLOTS:
+        raise ValueError("Slot inválido")
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cur:
+            # borrar marcas históricas del mismo slot
+            cur.execute("DELETE FROM assistance WHERE person_id=%s AND slot=%s", (person_id, slot))
+            # limpiar la marca agregada en tabla de acumulado
+            cur.execute(f"UPDATE attendance_slots SET {slot} = NULL WHERE person_id=%s", (person_id,))
+            return cur.rowcount
