@@ -393,3 +393,31 @@ def delete_people_by_ids(ids):
             # Luego personas
             cur.execute("DELETE FROM people WHERE id = ANY(%s)", (ids,))
             return cur.rowcount
+
+
+# -------- Case-insensitive authentication helper --------
+def authenticate_user_ci(username: str, password: str):
+    """
+    Authenticate ignoring username case.
+    Returns a dict like {"id":..., "username":..., "is_admin":..., "is_active":...}
+    or None if invalid.
+    """
+    import bcrypt
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, username, password_hash, is_admin, is_active FROM users WHERE LOWER(username)=LOWER(%s)",
+                (username.strip(),)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            uid, uname, phash, is_admin, is_active = row
+            try:
+                ok = bcrypt.checkpw(password.encode("utf-8"), phash.encode("utf-8") if isinstance(phash, str) else phash)
+            except Exception:
+                ok = False
+            if not ok:
+                return None
+            return {"id": uid, "username": uname, "is_admin": bool(is_admin), "is_active": bool(is_active)}

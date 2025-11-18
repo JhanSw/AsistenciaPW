@@ -147,7 +147,7 @@ def page():
 # ---------- Login simple para main.py ----------
 import streamlit as st
 try:
-    from db import authenticate_user, ensure_default_admin
+    from db import authenticate_user, ensure_default_admin, authenticate_user_ci
 except Exception:
     # Mantener compatibilidad si los nombres difieren
     from db import ensure_default_admin
@@ -158,10 +158,10 @@ except Exception:
         except Exception:
             return None
 
+
 def login_page():
     st.title("Ingreso")
 
-    # Garantiza admin por defecto si no existe
     try:
         ensure_default_admin()
     except Exception:
@@ -172,13 +172,49 @@ def login_page():
 
     if st.button("Entrar"):
         user_obj = None
+        uname_norm = (username or "").strip().lower()
+
+        # 1) Try case-insensitive auth if available
         try:
-            # si authenticate_user devuelve (ok, user)
-            result = authenticate_user(username.strip(), password.strip())
-            if isinstance(result, tuple) and len(result) == 2:
-                ok, user = result
-                user_obj = user if ok else None
-            else:
+            user_obj = authenticate_user_ci(uname_norm, (password or "").strip())
+        except Exception:
+            user_obj = None
+
+        # 2) Fallbacks: original authenticate_user, with normalized username and original
+        if not user_obj:
+            try:
+                res = authenticate_user(uname_norm, (password or "").strip())
+                if isinstance(res, tuple) and len(res) == 2:
+                    ok, user = res
+                    user_obj = user if ok else None
+                else:
+                    user_obj = res
+            except Exception:
+                user_obj = None
+
+        if not user_obj and username:
+            try:
+                res = authenticate_user(username.strip(), (password or "").strip())
+                if isinstance(res, tuple) and len(res) == 2:
+                    ok, user = res
+                    user_obj = user if ok else None
+                else:
+                    user_obj = res
+            except Exception:
+                user_obj = None
+
+        if user_obj and (user_obj.get("is_active", True)):
+            st.session_state["is_auth"] = True
+            st.session_state["user"] = {
+                "id": user_obj.get("id"),
+                "username": user_obj.get("username") or uname_norm,
+                "is_admin": bool(user_obj.get("is_admin", False)),
+            }
+            st.session_state["is_admin"] = bool(user_obj.get("is_admin", False))
+            st.rerun()
+        else:
+            st.error("Usuario/contraseña inválidos o inactivo.")
+
                 user_obj = result
         except Exception:
             user_obj = None
