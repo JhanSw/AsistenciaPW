@@ -1,3 +1,4 @@
+
 import streamlit as st
 from db import list_users, create_user, update_user, delete_user, log_action
 
@@ -8,7 +9,6 @@ def page():
 
     st.title("Usuarios")
 
-    # Estado para editor inline
     st.session_state.setdefault("editing_user", None)
     st.session_state.setdefault("editing_snapshot", None)
 
@@ -37,7 +37,6 @@ def page():
         st.info("No hay usuarios.")
         return
 
-    # Si hay un usuario en edición, mostrar editor arriba
     if st.session_state["editing_user"] is not None and st.session_state["editing_snapshot"] is not None:
         uid, username, is_admin, is_active = st.session_state["editing_snapshot"]
         st.markdown(f"### Editar usuario #{uid}")
@@ -60,8 +59,6 @@ def page():
                 st.success("Actualizado.")
                 curuser = st.session_state.get('user') or {}
                 log_action(curuser.get('id'), curuser.get('username'), 'update_user', details={'user_id': uid})
-                st.session_state["editing_user"] = None
-                st.session_state["editing_snapshot"] = None
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -83,7 +80,6 @@ def page():
 
         st.markdown("---")
 
-    # Render filas con botón Editar (abre editor inline)
     for (uid, username, is_admin, is_active, created_at) in data:
         cols = st.columns([3,2,2,2,2])
         cols[0].markdown(f"**{uid} – {username}**")

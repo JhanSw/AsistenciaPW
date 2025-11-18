@@ -1,7 +1,8 @@
+
 import os
 import bcrypt
 import psycopg2
-from psycopg2.extras import execute_values
+from psycopg2.extras import execute_values, Json
 from urllib.parse import urlparse
 import pandas as pd
 
@@ -35,8 +36,6 @@ def get_connection():
         )
 
 def init_database():
-    # (patched to also ensure audit table)
-
     conn = get_connection()
     with conn:
         with conn.cursor() as cur:
@@ -44,9 +43,7 @@ def init_database():
                 cur.execute("CREATE EXTENSION IF NOT EXISTS unaccent;")
             except Exception:
                 pass
-
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS people (
+            cur.execute("""CREATE TABLE IF NOT EXISTS people (
               id SERIAL PRIMARY KEY,
               region VARCHAR(255),
               department VARCHAR(255),
@@ -57,60 +54,47 @@ def init_database():
               email VARCHAR(255),
               position VARCHAR(255),
               entity VARCHAR(255)
-            );""")
-
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS assistance (
+            );""" )
+            cur.execute("""CREATE TABLE IF NOT EXISTS assistance (
               id SERIAL PRIMARY KEY,
               person_id INT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
-              timestamp_utc TIMESTAMP DEFAULT NOW()
-            );""")
-
-            # Add slot column if missing
-            cur.execute("""
-            DO $$
+              timestamp_utc TIMESTAMP DEFAULT NOW(),
+              slot TEXT
+            );""" )
+            cur.execute("""DO $$
             BEGIN
               IF NOT EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name='assistance' AND column_name='slot'
+                SELECT 1 FROM information_schema.check_constraints
+                WHERE constraint_name = 'assistance_slot_check'
               ) THEN
                 ALTER TABLE assistance
-                  ADD COLUMN slot TEXT,
-                  ADD CONSTRAINT assistance_slot_check
-                    CHECK (slot IN ('registro_dia1_manana','registro_dia1_tarde','registro_dia2_manana','registro_dia2_tarde'));
+                ADD CONSTRAINT assistance_slot_check
+                CHECK (slot IN ('registro_dia1_manana','registro_dia1_tarde','registro_dia2_manana','registro_dia2_tarde'));
               END IF;
-            END$$;
-            """)
-
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS users (
+            END$$;""" )
+            cur.execute("""CREATE TABLE IF NOT EXISTS users (
               id SERIAL PRIMARY KEY,
               username VARCHAR(100) UNIQUE NOT NULL,
               password_hash VARCHAR(200) NOT NULL,
               is_admin BOOLEAN NOT NULL DEFAULT FALSE,
               is_active BOOLEAN NOT NULL DEFAULT TRUE,
               created_at TIMESTAMP DEFAULT NOW()
-            );""")
-
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS attendance_slots (
+            );""" )
+            cur.execute("""CREATE TABLE IF NOT EXISTS attendance_slots (
               person_id INT PRIMARY KEY REFERENCES people(id) ON DELETE CASCADE,
               registro_dia1_manana TIMESTAMP NULL,
               registro_dia1_tarde  TIMESTAMP NULL,
               registro_dia2_manana TIMESTAMP NULL,
               registro_dia2_tarde  TIMESTAMP NULL
-            );""")
-
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS settings (
+            );""" )
+            cur.execute("""CREATE TABLE IF NOT EXISTS settings (
               key TEXT PRIMARY KEY,
               value TEXT NOT NULL
-            );""")
-
-            cur.execute("""
-            INSERT INTO settings(key, value)
+            );""" )
+            cur.execute("""INSERT INTO settings(key, value)
             VALUES ('active_slot', 'registro_dia1_manana')
-            ON CONFLICT (key) DO NOTHING;""")
+            ON CONFLICT (key) DO NOTHING;""" )
+    ensure_audit_table()
 
 def ensure_default_admin():
     conn = get_connection()
@@ -176,7 +160,6 @@ def delete_user(user_id):
                 raise ValueError("No se puede eliminar el usuario por defecto 'admin'.")
             cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
 
-# === Distinct values for dropdowns ===
 def distinct_values(column):
     assert column in ("region","department","municipality","entity")
     conn = get_connection()
@@ -184,17 +167,16 @@ def distinct_values(column):
         cur.execute(f"SELECT DISTINCT {column} FROM people WHERE {column} IS NOT NULL AND {column}<>'' ORDER BY {column}")
         return [r[0] for r in cur.fetchall()]
 
-# === Search with multi-filters (region/municipality/entity) ===
 def search_people_with_slots(q="", regions=None, municipalities=None, entities=None, limit=1000):
     regions = regions or []
     municipalities = municipalities or []
     entities = entities or []
     conn = get_connection()
-    sql = """SELECT p.id, p.region, p.department, p.municipality, p.document, p.names, p.phone, p.email, p.position, p.entity,
-                    s.registro_dia1_manana, s.registro_dia1_tarde, s.registro_dia2_manana, s.registro_dia2_tarde
-             FROM people p
-             LEFT JOIN attendance_slots s ON s.person_id = p.id
-             WHERE 1=1"""
+    sql = (
+        "SELECT p.id, p.region, p.department, p.municipality, p.document, p.names, p.phone, p.email, p.position, p.entity, "
+        "s.registro_dia1_manana, s.registro_dia1_tarde, s.registro_dia2_manana, s.registro_dia2_tarde "
+        "FROM people p LEFT JOIN attendance_slots s ON s.person_id = p.id WHERE 1=1"
+    )
     params = []
     if q:
         sql += " AND (unaccent(lower(p.names)) LIKE unaccent(lower(%s)) OR p.document ILIKE %s)"
@@ -267,23 +249,6 @@ def mark_attendance_for_slot(person_id: int, slot: str):
             ensure_attendance_slots(person_id)
             cur.execute(f"UPDATE attendance_slots SET {slot} = COALESCE({slot}, NOW()) WHERE person_id = %s", (person_id,))
 
-def find_person_by_document(document: str):
-    conn = get_connection()
-    with conn.cursor() as cur:
-        cur.execute("SELECT id, region, department, municipality, document, names, phone, email, position, entity FROM people WHERE document=%s", (document,))
-        return cur.fetchone()
-
-def create_person(**kwargs):
-    fields = ["region","department","municipality","document","names","phone","email","position","entity"]
-    cols = ",".join(fields)
-    vals = [kwargs.get(k) for k in fields]
-    placeholders = ",".join(["%s"]*len(fields))
-    conn = get_connection()
-    with conn:
-        with conn.cursor() as cur:
-            cur.execute(f"INSERT INTO people ({cols}) VALUES ({placeholders}) RETURNING id;", vals)
-            return cur.fetchone()[0]
-
 def get_attendance_status(person_id: int):
     conn = get_connection()
     with conn.cursor() as cur:
@@ -291,8 +256,7 @@ def get_attendance_status(person_id: int):
         row = cur.fetchone()
     if not row:
         return {k: None for k in SLOTS}
-    keys = SLOTS
-    return dict(zip(keys, row))
+    return dict(zip(SLOTS, row))
 
 def clear_attendance_slot(person_id: int, slot: str):
     if slot not in SLOTS:
@@ -300,28 +264,25 @@ def clear_attendance_slot(person_id: int, slot: str):
     conn = get_connection()
     with conn:
         with conn.cursor() as cur:
-            # borrar marcas históricas del mismo slot
             cur.execute("DELETE FROM assistance WHERE person_id=%s AND slot=%s", (person_id, slot))
-            # limpiar la marca agregada en tabla de acumulado
             cur.execute(f"UPDATE attendance_slots SET {slot} = NULL WHERE person_id=%s", (person_id,))
             return cur.rowcount
 
-# === Auditoría ===
-def init_audit(conn):
-    with conn.cursor() as cur:
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS audit_log (
-            id SERIAL PRIMARY KEY,
-            timestamp_utc TIMESTAMP DEFAULT NOW(),
-            user_id INT,
-            username TEXT,
-            action TEXT NOT NULL,
-            person_id INT,
-            slot TEXT,
-            details JSONB
-        );
-        """)
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp_utc DESC);")
+def ensure_audit_table():
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute("""CREATE TABLE IF NOT EXISTS audit_log (
+                id SERIAL PRIMARY KEY,
+                timestamp_utc TIMESTAMP DEFAULT NOW(),
+                user_id INT,
+                username TEXT,
+                action TEXT NOT NULL,
+                person_id INT,
+                slot TEXT,
+                details JSONB
+            );""" )
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp_utc DESC);")
 
 def log_action(user_id, username, action, person_id=None, slot=None, details=None):
     conn = get_connection()
@@ -329,10 +290,20 @@ def log_action(user_id, username, action, person_id=None, slot=None, details=Non
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO audit_log(user_id, username, action, person_id, slot, details) VALUES (%s,%s,%s,%s,%s,%s)",
-                (user_id, username, action, person_id, slot, psycopg2.extras.Json(details) if details is not None else None)
+                (user_id, username, action, person_id, slot, Json(details) if details is not None else None)
             )
 
-def ensure_audit_table():
+def find_person_by_document(document):
     conn = get_connection()
-    with conn:
-        init_audit(conn)
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, region, department, municipality, document, names, phone, email, position, entity FROM people WHERE document=%s", (document,))
+        return cur.fetchone()
+
+def create_person(region, department, municipality, document, names, phone, email, position, entity):
+    row = (region, department, municipality, document, names, phone, email, position, entity)
+    upsert_people_bulk([row])
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM people WHERE document=%s", (document,))
+        r = cur.fetchone()
+        return r[0] if r else None

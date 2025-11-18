@@ -1,8 +1,12 @@
+
 import streamlit as st
-from db import get_active_slot, set_active_slot, mark_attendance_for_slot, find_person_by_document, create_person, get_attendance_status, clear_attendance_slot, log_action
+from db import (
+    get_active_slot, set_active_slot, mark_attendance_for_slot,
+    find_person_by_document, create_person,
+    get_attendance_status, clear_attendance_slot, log_action
+)
 
 def _labels(person_row):
-    # row: id, region, department, municipality, document, names, phone, email, position, entity
     keys = ["id","region","department","municipality","document","names","phone","email","position","entity"]
     return dict(zip(keys, person_row))
 
@@ -36,7 +40,6 @@ def page():
     with c2:
         do_search = st.button("Buscar", use_container_width=True)
 
-    # Estado para detalle encontrado
     if "found_person" not in st.session_state:
         st.session_state["found_person"] = None
 
@@ -52,7 +55,6 @@ def page():
                 st.session_state["found_person"] = None
                 st.info("No existe en base. Puedes crearlo abajo y confirmar.")
 
-    # Si existe, mostrar detalle bonito y botón Confirmar
     if st.session_state.get("found_person"):
         p = st.session_state["found_person"]
         st.markdown("### Datos del registro")
@@ -73,7 +75,7 @@ def page():
 
         st.markdown("---")
         st.markdown("#### Estado de registros")
-        status = get_attendance_status(p["id"])  # dict por slot -> timestamp
+        status = get_attendance_status(p["id"])
         pretty = {
             "registro_dia1_manana": "Registro mañana día 1.",
             "registro_dia1_tarde":  "Registro tarde día 1.",

@@ -1,5 +1,13 @@
+
 import streamlit as st
-from db import create_person
+from db import upsert_people_bulk
+
+def create_person(**kwargs):
+    row = (kwargs.get("region",""), kwargs.get("department",""), kwargs.get("municipality",""),
+           kwargs.get("document",""), kwargs.get("names",""), kwargs.get("phone",""),
+           kwargs.get("email",""), kwargs.get("position",""), kwargs.get("entity",""))
+    upsert_people_bulk([row])
+    return True
 
 def page():
     st.title("Nuevo registro")
@@ -19,7 +27,7 @@ def page():
         if not document.strip() or not names.strip():
             st.error("Documento y Nombres son obligatorios.")
             return
-        pid = create_person(
+        ok = create_person(
             region=region.strip(),
             department=department.strip(),
             municipality=municipality.strip(),
@@ -30,4 +38,5 @@ def page():
             position=position.strip(),
             entity=entity.strip(),
         )
-        st.success(f"Creado ID {pid}")
+        if ok:
+            st.success("Creado.")

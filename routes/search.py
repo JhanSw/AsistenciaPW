@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import io
@@ -26,10 +27,8 @@ ORDER = ["id","region","department","municipality","document","names","phone","e
 def page():
     st.title("Buscar")
 
-    # Text search still allowed (by nombre/documento)
     q_text = st.text_input("Buscar por nombre o documento", value="")
 
-    # Dropdown options from DB
     regiones = distinct_values("region")
     municipios = distinct_values("municipality")
     entidades = distinct_values("entity")
@@ -42,21 +41,18 @@ def page():
     with c3:
         sel_ent = st.multiselect("Entidad", entidades)
 
-    # Query
     df = search_people_with_slots(
         q=q_text.strip(),
         regions=sel_region,
         municipalities=sel_muni,
         entities=sel_ent,
-        limit=1000
+        limit=2000
     )
 
-    # Reorder and relabel
     for col in ORDER:
         if col not in df.columns:
             df[col] = None
     df = df[ORDER]
-
     df = df.rename(columns=LABELS)
 
     st.write(f"Se encontraron **{len(df)}** registros.")

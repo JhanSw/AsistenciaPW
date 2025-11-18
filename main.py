@@ -1,3 +1,4 @@
+
 import streamlit as st
 from db import init_database, ensure_default_admin, ensure_audit_table
 from routes import assistance, search, create, users, import_people, audit
@@ -8,7 +9,8 @@ st.set_page_config(page_title="Asistencia", layout="wide")
 if "db_init" not in st.session_state:
     try:
         init_database()
-        ensure_default_admin(); ensure_audit_table()
+        ensure_default_admin()
+        ensure_audit_table()
     except Exception as e:
         st.warning(f"No se pudo inicializar DB automáticamente: {e}")
     st.session_state["db_init"] = True
