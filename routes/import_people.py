@@ -75,7 +75,7 @@ def page():
 
     people = pd.DataFrame({k: (tmp[k] if not isinstance(tmp[k], str) else pd.Series([""]*len(df))) for k in TARGET})
 
-    # Normalizaciones solicitadas
+    # Normalizaciones
     people["document"] = people["document"].apply(_only_digits)
     people["phone"] = people["phone"].apply(_only_digits)
 
@@ -86,15 +86,15 @@ def page():
     people["email"] = people["email"].apply(_clean_email)
 
     # Validaciones mínimas
-    errors = []
     missing_doc = people["document"].eq("") | people["document"].isna()
     missing_names = people["names"].eq("") | people["names"].isna()
+    dup_infile = people["document"].duplicated(keep="first")
+
+    errors = []
     if missing_doc.any():
         errors.append(f"{int(missing_doc.sum())} fila(s) sin DOCUMENTO.")
     if missing_names.any():
         errors.append(f"{int(missing_names.sum())} fila(s) sin NOMBRES.")
-
-    dup_infile = people["document"].duplicated(keep="first")
     if int(dup_infile.sum()) > 0:
         errors.append(f"{int(dup_infile.sum())} duplicado(s) de DOCUMENTO en el archivo; se conservará la primera aparición.")
 
@@ -106,14 +106,33 @@ def page():
         for e in errors:
             st.write(f"- {e}")
 
-    can_import = not missing_doc.any() and not missing_names.any()
+    # NUEVO: opción para importar ignorando filas inválidas (sin DOCUMENTO o sin NOMBRES)
+    allow_skip = st.checkbox("Permitir importar y **omitir automáticamente** las filas inválidas (sin DOCUMENTO o sin NOMBRES).")
+
+    # Botón habilitado si pasa las validaciones O si el usuario marcó 'allow_skip'
+    can_import = (not missing_doc.any() and not missing_names.any()) or allow_skip
+
     if st.button("Importar a la base de datos", disabled=not can_import):
         try:
-            people = people[~dup_infile].copy()
-            rows = list(people[TARGET].itertuples(index=False, name=None))
+            # Siempre quitamos duplicados dentro del archivo
+            people2 = people[~dup_infile].copy()
+
+            # Si el usuario permitió, filtramos filas inválidas; de lo contrario, a este punto no hay inválidas
+            skipped = 0
+            if allow_skip:
+                invalid_mask = missing_doc | missing_names
+                skipped = int(invalid_mask.sum())
+                people2 = people2[~invalid_mask].copy()
+
+            rows = list(people2[TARGET].itertuples(index=False, name=None))
             count = upsert_people_bulk(rows)
-            st.success(f"Importación completada. Registros procesados: {len(rows)} (upsert={count}).")
+            msg = f"Importación completada. Registros procesados: {len(rows)} (upsert={count})."
+            if allow_skip and skipped:
+                msg += f" Se omitieron {skipped} fila(s) inválidas."
+            st.success(msg)
+
             curuser = st.session_state.get('user') or {}
-            log_action(curuser.get('id'), curuser.get('username'), 'import_people', details={'rows': len(rows), 'sheet': sheet, 'normalized': True})
+            log_action(curuser.get('id'), curuser.get('username'), 'import_people',
+                       details={'rows': len(rows), 'sheet': sheet, 'normalized': True, 'skipped': skipped})
         except Exception as ex:
             st.error(f"Error durante la importación: {ex}")
