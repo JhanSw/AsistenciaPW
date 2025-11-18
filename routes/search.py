@@ -33,8 +33,8 @@ ORDER = [
 def page():
     st.title("Buscar")
 
+    # Filtros
     q_text = st.text_input("Buscar por nombre o documento", value="")
-
     regiones = distinct_values("region")
     municipios = distinct_values("municipality")
     entidades = distinct_values("entity")
@@ -47,6 +47,7 @@ def page():
     with c3:
         sel_ent = st.multiselect("Entidad", entidades)
 
+    # Consulta
     df = search_people_with_slots(
         q=q_text.strip(),
         regions=sel_region,
@@ -55,78 +56,79 @@ def page():
         limit=2000
     )
 
+    # Reordenar y renombrar
     for col in ORDER:
         if col not in df.columns:
             df[col] = None
-    df = df[ORDER]
-    df = df.rename(columns=LABELS)
+    df = df[ORDER].rename(columns=LABELS)
 
     st.write(f"Se encontraron **{len(df)}** registros.")
 
-    # === Selección con checkboxes + acciones en lote ===
+    # Selección por checkboxes
     st.session_state.setdefault("selected_people_ids", set())
-
     slot = get_active_slot()
-    
-cols_actions = st.columns([1.2,2.4,2.8,2.8,2.2])
-with cols_actions[0]:
-    all_now = st.checkbox("Todos", key="select_all_people", value=False)
-with cols_actions[1]:
-    if st.button("✅ Confirmar seleccionados (momento activo)"):
-        ids = list(st.session_state["selected_people_ids"])
-        if not ids:
-            st.warning("No hay personas seleccionadas.")
-        else:
-            for pid in ids:
-                try:
-                    mark_attendance_for_slot(pid, slot)
-                    curuser = st.session_state.get('user') or {}
-                    log_action(curuser.get('id'), curuser.get('username'), 'confirm_attendance', person_id=pid, slot=slot)
-                except Exception as e:
-                    st.warning(f"PID {pid}: {e}")
-            st.success(f"Confirmado para {len(ids)} persona(s) en **{slot.replace('_',' ').title()}**.")
-            st.session_state["selected_people_ids"] = set()
-            st.rerun()
-with cols_actions[2]:
-    disable_clear = not st.session_state.get("is_admin", False)
-    if st.button("🗑️ Borrar seleccionados (momento activo)", disabled=disable_clear):
-        ids = list(st.session_state["selected_people_ids"])
-        if not ids:
-            st.warning("No hay personas seleccionadas.")
-        else:
-            if not st.session_state.get("is_admin", False):
-                st.error("Solo administradores.")
-            else:
-                cleared = 0
-                for pid in ids:
-                    try:
-                        n = clear_attendance_slot(pid, slot)
-                        if n: cleared += 1
-                        curuser = st.session_state.get('user') or {}
-                        log_action(curuser.get('id'), curuser.get('username'), 'clear_attendance', person_id=pid, slot=slot)
-                    except Exception as e:
-                        st.warning(f"PID {pid}: {e}")
-                st.success(f"Borrado para {cleared} persona(s) en **{slot.replace('_',' ').title()}**.")
-                st.session_state["selected_people_ids"] = set()
-                st.rerun()
-with cols_actions[3]:
-    # Eliminar personas completas (solo admin)
-    if st.button("🧹 Eliminar personas seleccionadas (definitivo)", disabled=not st.session_state.get("is_admin", False)):
-        if not st.session_state.get("is_admin", False):
-            st.error("Solo administradores.")
-        else:
+
+    cols_actions = st.columns([1.2,2.4,2.8,2.8,2.2])
+    with cols_actions[0]:
+        all_now = st.checkbox("Todos", key="select_all_people", value=False)
+
+    with cols_actions[1]:
+        if st.button("✅ Confirmar seleccionados (momento activo)"):
             ids = list(st.session_state["selected_people_ids"])
             if not ids:
                 st.warning("No hay personas seleccionadas.")
             else:
-                deleted = delete_people_by_ids(ids)
-                st.success(f"Eliminadas {deleted} persona(s) del sistema.")
-                curuser = st.session_state.get('user') or {}
-                log_action(curuser.get('id'), curuser.get('username'), 'delete_people_bulk', details={'count': deleted, 'ids': ids[:50]})
+                for pid in ids:
+                    try:
+                        mark_attendance_for_slot(pid, slot)
+                        u = st.session_state.get('user') or {}
+                        log_action(u.get('id'), u.get('username'), 'confirm_attendance', person_id=pid, slot=slot)
+                    except Exception as e:
+                        st.warning(f"PID {pid}: {e}")
+                st.success(f"Confirmado para {len(ids)} persona(s) en **{slot.replace('_',' ').title()}**.")
                 st.session_state["selected_people_ids"] = set()
                 st.rerun()
-with cols_actions[4]:
-    st.caption(f"Momento activo: **{slot.replace('_',' ').title()}**")
+
+    with cols_actions[2]:
+        if st.button("🗑️ Borrar seleccionados (momento activo)", disabled=not st.session_state.get("is_admin", False)):
+            ids = list(st.session_state["selected_people_ids"])
+            if not ids:
+                st.warning("No hay personas seleccionadas.")
+            else:
+                if not st.session_state.get("is_admin", False):
+                    st.error("Solo administradores.")
+                else:
+                    cleared = 0
+                    for pid in ids:
+                        try:
+                            n = clear_attendance_slot(pid, slot)
+                            if n: cleared += 1
+                            u = st.session_state.get('user') or {}
+                            log_action(u.get('id'), u.get('username'), 'clear_attendance', person_id=pid, slot=slot)
+                        except Exception as e:
+                            st.warning(f"PID {pid}: {e}")
+                    st.success(f"Borrado para {cleared} persona(s) en **{slot.replace('_',' ').title()}**.")
+                    st.session_state["selected_people_ids"] = set()
+                    st.rerun()
+
+    with cols_actions[3]:
+        if st.button("🧹 Eliminar personas seleccionadas (definitivo)", disabled=not st.session_state.get("is_admin", False)):
+            if not st.session_state.get("is_admin", False):
+                st.error("Solo administradores.")
+            else:
+                ids = list(st.session_state["selected_people_ids"])
+                if not ids:
+                    st.warning("No hay personas seleccionadas.")
+                else:
+                    deleted = delete_people_by_ids(ids)
+                    st.success(f"Eliminadas {deleted} persona(s) del sistema.")
+                    u = st.session_state.get('user') or {}
+                    log_action(u.get('id'), u.get('username'), 'delete_people_bulk', details={'count': deleted, 'ids': ids[:50]})
+                    st.session_state["selected_people_ids"] = set()
+                    st.rerun()
+
+    with cols_actions[4]:
+        st.caption(f"Momento activo: **{slot.replace('_',' ').title()}**")
 
     # Mostrar tabla
     st.dataframe(df)
@@ -139,50 +141,48 @@ with cols_actions[4]:
 
     current_ids = set(pd.to_numeric(ids_series, errors="coerce").dropna().astype(int).tolist())
 
-    
-# Si marcan 'Todos', fuerza marcar todo y recargar; si lo quitan, desmarca todo y recarga
-current_ids = set(pd.to_numeric(ids_series, errors="coerce").dropna().astype(int).tolist())
-if 'select_all_master' not in st.session_state:
-    st.session_state['select_all_master'] = False
-if all_now and not st.session_state['select_all_master']:
-    for pid in current_ids:
-        st.session_state[f"selpid_{pid}"] = True
-    st.session_state['select_all_master'] = True
-    st.rerun()
-if not all_now and st.session_state['select_all_master']:
-    for pid in current_ids:
-        st.session_state[f"selpid_{pid}"] = False
-    st.session_state['select_all_master'] = False
-    st.rerun()
+    # Aplicar/quitar 'Todos' con rerun
+    if 'select_all_master' not in st.session_state:
+        st.session_state['select_all_master'] = False
+    if all_now and not st.session_state['select_all_master']:
+        for pid in current_ids:
+            st.session_state[f"selpid_{pid}"] = True
+        st.session_state['select_all_master'] = True
+        st.rerun()
+    if not all_now and st.session_state['select_all_master']:
+        for pid in current_ids:
+            st.session_state[f"selpid_{pid}"] = False
+        st.session_state['select_all_master'] = False
+        st.rerun()
 
-# Reconstruir selección según estados reales de checkboxes
-selected = set()
-max_rows = 500
-rows_to_show = min(len(ids_series), max_rows)
-if len(ids_series) > max_rows:
-    st.info(f"Mostrando {max_rows} primeras filas para selección (de {len(ids_series)}). Filtra más para ver menos.")
+    # Construir selección desde los checkboxes
+    selected = set()
+    max_rows = 500
+    rows_to_show = min(len(ids_series), max_rows)
+    if len(ids_series) > max_rows:
+        st.info(f"Mostrando {max_rows} primeras filas para selección (de {len(ids_series)}). Filtra más para ver menos.")
 
-for i in range(rows_to_show):
-    try:
-        pid = int(ids_series.iloc[i])
-    except Exception:
-        continue
-    doc = str(docs_series.iloc[i]) if i < len(docs_series) else ""
-    nm = str(names_series.iloc[i]) if i < len(names_series) else ""
-    key = f"selpid_{pid}"
-    st.session_state.setdefault(key, False)
-    cols = st.columns([0.6,2.6,2.6])
-    with cols[0]:
-        cb = st.checkbox("", key=key)  # sin value=
-    cols[1].markdown(f"**{nm}**")
-    cols[2].markdown(f"`{doc}`")
-    if st.session_state.get(key, False):
-        selected.add(pid)
+    for i in range(rows_to_show):
+        try:
+            pid = int(ids_series.iloc[i])
+        except Exception:
+            continue
+        doc = str(docs_series.iloc[i]) if i < len(docs_series) else ""
+        nm = str(names_series.iloc[i]) if i < len(names_series) else ""
+        key = f"selpid_{pid}"
+        st.session_state.setdefault(key, False)
+        c = st.columns([0.6,2.6,2.6])
+        with c[0]:
+            st.checkbox("", key=key)  # sin value=
+        c[1].markdown(f"**{nm}**")
+        c[2].markdown(f"`{doc}`")
+        if st.session_state.get(key, False):
+            selected.add(pid)
 
-st.session_state["selected_people_ids"] = selected
-st.caption(f"Seleccionados: **{len(selected)}**")
+    st.session_state["selected_people_ids"] = selected
+    st.caption(f"Seleccionados: **{len(selected)}**")
 
-    # Exportar Excel (igual que antes)
+    # Exportar Excel
     if not df.empty:
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
