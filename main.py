@@ -8,9 +8,14 @@ st.set_page_config(page_title="Asistencia", layout="wide")
 
 if "db_init" not in st.session_state:
     try:
-        init_database()
+        
+init_database()
 ensure_default_admin()
 ensure_audit_table()
+try:
+    ensure_import_batch_tables()
+except Exception as e:
+    st.info(f"No se pudo inicializar DB automáticamente: {e}")
 try:
     ensure_import_batch_tables()
 except Exception as e:
