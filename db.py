@@ -380,3 +380,16 @@ def delete_people_from_batch(batch_id):
             cur.execute("DELETE FROM import_batch_people WHERE batch_id=%s", (batch_id,))
             cur.execute("DELETE FROM import_batch WHERE id=%s", (batch_id,))
             return deleted
+
+
+def delete_people_by_ids(ids):
+    if not ids:
+        return 0
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cur:
+            # Primero asistencias (por si no hay ON DELETE CASCADE)
+            cur.execute("DELETE FROM assistance WHERE person_id = ANY(%s)", (ids,))
+            # Luego personas
+            cur.execute("DELETE FROM people WHERE id = ANY(%s)", (ids,))
+            return cur.rowcount

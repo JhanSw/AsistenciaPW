@@ -4,7 +4,8 @@ import pandas as pd
 import io
 from db import (
     search_people_with_slots, distinct_values,
-    get_active_slot, mark_attendance_for_slot, clear_attendance_slot, log_action
+    get_active_slot, mark_attendance_for_slot, clear_attendance_slot, log_action,
+    delete_people_by_ids
 )
 
 LABELS = {
@@ -66,7 +67,7 @@ def page():
     st.session_state.setdefault("selected_people_ids", set())
 
     slot = get_active_slot()
-    cols_actions = st.columns([1,2,2,2])
+    cols_actions = st.columns([1.2,2.4,2.8,2.4,2.2])
     with cols_actions[0]:
         select_all = st.checkbox("Todos", key="select_all_people", value=False)
     with cols_actions[1]:
@@ -108,6 +109,22 @@ def page():
                     st.session_state["selected_people_ids"] = set()
                     st.rerun()
     with cols_actions[3]:
+        # NUEVO: borrar personas completas (solo admin)
+        if st.button("🧹 Eliminar personas seleccionadas (definitivo)", disabled=not st.session_state.get("is_admin", False)):
+            if not st.session_state.get("is_admin", False):
+                st.error("Solo administradores.")
+            else:
+                ids = list(st.session_state["selected_people_ids"])
+                if not ids:
+                    st.warning("No hay personas seleccionadas.")
+                else:
+                    deleted = delete_people_by_ids(ids)
+                    st.success(f"Eliminadas {deleted} persona(s) del sistema.")
+                    curuser = st.session_state.get('user') or {}
+                    log_action(curuser.get('id'), curuser.get('username'), 'delete_people_bulk', details={'count': deleted, 'ids': ids[:50]})
+                    st.session_state["selected_people_ids"] = set()
+                    st.rerun()
+    with cols_actions[4]:
         st.caption(f"Momento activo: **{slot.replace('_',' ').title()}**")
 
     # Mostrar tabla
@@ -121,10 +138,18 @@ def page():
 
     current_ids = set(pd.to_numeric(ids_series, errors="coerce").dropna().astype(int).tolist())
 
+    # Si marcan 'Todos', setea estados y recarga para que los checkboxes usen session_state
     if select_all:
-        # Selecciona todos los visibles: setea True para sus checkboxes
         for pid in current_ids:
             st.session_state[f"selpid_{pid}"] = True
+        st.session_state["_was_all"] = True
+        st.rerun()
+    else:
+        if st.session_state.get("_was_all", False):
+            # Si quieres desmarcar todo al quitar 'Todos', descomenta:
+            # for pid in current_ids:
+            #     st.session_state[f"selpid_{pid}"] = False
+            st.session_state["_was_all"] = False
 
     # Reconstruir selección según estados reales de checkboxes
     selected = set()
@@ -141,10 +166,10 @@ def page():
         doc = str(docs_series.iloc[i]) if i < len(docs_series) else ""
         nm = str(names_series.iloc[i]) if i < len(names_series) else ""
         key = f"selpid_{pid}"
-        preset = bool(st.session_state.get(key, False))
+        st.session_state.setdefault(key, False)
         cols = st.columns([0.6,2.6,2.6])
         with cols[0]:
-            cb = st.checkbox("", key=key, value=preset)
+            cb = st.checkbox("", key=key)  # sin value=
         cols[1].markdown(f"**{nm}**")
         cols[2].markdown(f"`{doc}`")
         if st.session_state.get(key, False):
