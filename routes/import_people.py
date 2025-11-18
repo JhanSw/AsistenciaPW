@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 import re
-from db import upsert_people_bulk, log_action
+from db import upsert_people_bulk, log_action, get_existing_documents, get_ids_by_documents, create_import_batch, list_import_batches, delete_people_from_batch
 
 TARGET = ["region","department","municipality","document","names","phone","email","position","entity"]
 
@@ -125,14 +125,45 @@ def page():
                 people2 = people2[~invalid_mask].copy()
 
             rows = list(people2[TARGET].itertuples(index=False, name=None))
-            count = upsert_people_bulk(rows)
+            
+count = upsert_people_bulk(rows)
+# Determinar cuáles documentos eran nuevos (no existían antes)
+docs = [str(r[3]) for r in rows]  # position 3 = document en TARGET
+existing = get_existing_documents(docs)
+# Luego del upsert, consultar ids actuales
+id_map = get_ids_by_documents(docs)
+inserted_ids = [id_map[d] for d in docs if d not in existing and d in id_map]
+
+# Registrar el batch para poder borrarlo luego
+curuser = st.session_state.get('user') or {}
+batch_id = create_import_batch(curuser.get('id'), curuser.get('username'), len(rows), inserted_ids)
+
             msg = f"Importación completada. Registros procesados: {len(rows)} (upsert={count})."
             if allow_skip and skipped:
                 msg += f" Se omitieron {skipped} fila(s) inválidas."
-            st.success(msg)
+            st.success(msg + f"  Lote de importación: #{batch_id} (nuevos: {len(inserted_ids)}).")
 
             curuser = st.session_state.get('user') or {}
             log_action(curuser.get('id'), curuser.get('username'), 'import_people',
                        details={'rows': len(rows), 'sheet': sheet, 'normalized': True, 'skipped': skipped})
         except Exception as ex:
             st.error(f"Error durante la importación: {ex}")
+
+
+st.markdown("---")
+st.subheader("Borrar personas de un lote de importación")
+st.caption("Solo elimina personas que **fueron creadas** en ese lote. No afecta registros preexistentes.")
+batches = list_import_batches(limit=30)
+if not batches:
+    st.info("No hay lotes registrados.")
+else:
+    for (bid, created_at, username, total_rows, inserted_count) in batches:
+        cols = st.columns([4,2,2,2])
+        cols[0].write(f"Lote #{bid} — {created_at} — por {username or '-'}")
+        cols[1].write(f"Filas archivo: {total_rows}")
+        cols[2].write(f"Nuevos: {inserted_count}")
+        if cols[3].button("Eliminar lote", key=f"del_batch_{bid}"):
+            deleted = delete_people_from_batch(bid)
+            st.success(f"Eliminadas {deleted} persona(s) creadas por el lote #{bid}.")
+            log_action(st.session_state.get('user',{}).get('id'), st.session_state.get('user',{}).get('username'), 'delete_import_batch', details={'batch_id': bid, 'deleted': deleted})
+            st.rerun()

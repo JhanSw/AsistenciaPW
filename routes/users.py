@@ -11,6 +11,7 @@ def page():
 
     st.session_state.setdefault("editing_user", None)
     st.session_state.setdefault("editing_snapshot", None)
+    st.session_state.setdefault("selected_users", set())
 
     with st.expander("➕ Crear usuario"):
         with st.form("crear_user"):
@@ -32,11 +33,52 @@ def page():
                     st.error(f"Error: {e}")
 
     st.subheader("Listado")
+
     data = list_users()
     if not data:
         st.info("No hay usuarios.")
         return
 
+    # Barra superior con acciones en lote
+    cols_top = st.columns([1,2,2,2,3])
+    with cols_top[0]:
+        select_all = st.checkbox("Todos", key="select_all_users", value=False)
+    with cols_top[-1]:
+        if st.button("🗑️ Eliminar seleccionados", type="secondary"):
+            to_delete = list(st.session_state["selected_users"])
+            if not to_delete:
+                st.warning("No hay usuarios seleccionados.")
+            else:
+                deleted = 0
+                errs = []
+                for uid, username in [(u[0], u[1]) for u in data if u[0] in to_delete]:
+                    if username == "admin":
+                        errs.append("No se puede eliminar el usuario 'admin'.")
+                        continue
+                    try:
+                        delete_user(uid)
+                        deleted += 1
+                    except Exception as e:
+                        errs.append(str(e))
+                st.session_state["selected_users"] = set()
+                if deleted:
+                    st.success(f"Eliminados {deleted} usuario(s).")
+                    curuser = st.session_state.get('user') or {}
+                    log_action(curuser.get('id'), curuser.get('username'), 'delete_user', details={'bulk': True, 'count': deleted})
+                    st.rerun()
+                if errs:
+                    st.warning(" | ".join(errs))
+
+    # 'Seleccionar todo' o limpiar selección si la lista cambió
+    current_ids = {uid for (uid, *_rest) in data}
+    selected = set(st.session_state["selected_users"]) & current_ids
+    if select_all:
+        selected = set(current_ids)
+        # pero sin 'admin'
+        selected -= {uid for (uid, username, *_r) in data if username == "admin"}
+    st.session_state["selected_users"] = selected
+
+    # Editor en línea (individual)
     if st.session_state["editing_user"] is not None and st.session_state["editing_snapshot"] is not None:
         uid, username, is_admin, is_active = st.session_state["editing_snapshot"]
         st.markdown(f"### Editar usuario #{uid}")
@@ -80,13 +122,23 @@ def page():
 
         st.markdown("---")
 
+    # Tabla con checkboxes + datos + editar
     for (uid, username, is_admin, is_active, created_at) in data:
-        cols = st.columns([3,2,2,2,2])
-        cols[0].markdown(f"**{uid} – {username}**")
-        cols[1].write("Admin ✅" if is_admin else "Admin ❌")
-        cols[2].write("Activo ✅" if is_active else "Activo ❌")
-        cols[3].write(str(created_at) if created_at else "-")
-        if cols[4].button("Editar", key=f"edit_{uid}"):
+        row = st.columns([0.7,2.8,1.4,1.4,2,1.2])
+        disabled = (username == "admin")
+        checked = uid in st.session_state["selected_users"]
+        with row[0]:
+            cb = st.checkbox("", key=f"sel_{uid}", value=checked, disabled=disabled)
+            # Sync selección
+            if cb and not disabled:
+                st.session_state["selected_users"].add(uid)
+            else:
+                st.session_state["selected_users"].discard(uid)
+        row[1].markdown(f"**{uid} – {username}**")
+        row[2].write("Admin ✅" if is_admin else "Admin ❌")
+        row[3].write("Activo ✅" if is_active else "Activo ❌")
+        row[4].write(str(created_at) if created_at else "-")
+        if row[5].button("Editar", key=f"edit_{uid}"):
             st.session_state["editing_user"] = uid
             st.session_state["editing_snapshot"] = (uid, username, is_admin, is_active)
             st.rerun()

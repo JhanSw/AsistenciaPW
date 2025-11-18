@@ -307,3 +307,76 @@ def create_person(region, department, municipality, document, names, phone, emai
         cur.execute("SELECT id FROM people WHERE document=%s", (document,))
         r = cur.fetchone()
         return r[0] if r else None
+
+
+# === Import batches (track inserted persons from each import) ===
+def ensure_import_batch_tables():
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute("""CREATE TABLE IF NOT EXISTS import_batch (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT NOW(),
+                user_id INT,
+                username TEXT,
+                total_rows INT DEFAULT 0,
+                inserted_count INT DEFAULT 0
+            );""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS import_batch_people (
+                batch_id INT REFERENCES import_batch(id) ON DELETE CASCADE,
+                person_id INT REFERENCES people(id) ON DELETE CASCADE
+            );""")
+
+def get_existing_documents(doc_list):
+    if not doc_list:
+        return set()
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT document FROM people WHERE document = ANY(%s)", (doc_list,))
+        return set(d[0] for d in cur.fetchall())
+
+def get_ids_by_documents(doc_list):
+    if not doc_list:
+        return {}
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, document FROM people WHERE document = ANY(%s)", (doc_list,))
+        return {doc: pid for (pid, doc) in cur.fetchall()}
+
+def create_import_batch(user_id, username, total_rows, inserted_ids):
+    ensure_import_batch_tables()
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO import_batch(user_id, username, total_rows, inserted_count) VALUES (%s,%s,%s,%s) RETURNING id",
+                (user_id, username, total_rows, len(inserted_ids))
+            )
+            batch_id = cur.fetchone()[0]
+            if inserted_ids:
+                values = [(batch_id, pid) for pid in inserted_ids]
+                from psycopg2.extras import execute_values as _ev
+                _ev(cur, "INSERT INTO import_batch_people(batch_id, person_id) VALUES %s", values, page_size=1000)
+            return batch_id
+
+def list_import_batches(limit=20):
+    ensure_import_batch_tables()
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, created_at, username, total_rows, inserted_count FROM import_batch ORDER BY id DESC LIMIT %s", (limit,))
+        return cur.fetchall()
+
+def delete_people_from_batch(batch_id):
+    ensure_import_batch_tables()
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT person_id FROM import_batch_people WHERE batch_id=%s", (batch_id,))
+            ids = [r[0] for r in cur.fetchall()]
+            if not ids:
+                return 0
+            cur.execute("DELETE FROM people WHERE id = ANY(%s)", (ids,))
+            deleted = cur.rowcount
+            cur.execute("DELETE FROM import_batch_people WHERE batch_id=%s", (batch_id,))
+            cur.execute("DELETE FROM import_batch WHERE id=%s", (batch_id,))
+            return deleted
