@@ -142,3 +142,55 @@ def page():
             st.session_state["editing_user"] = uid
             st.session_state["editing_snapshot"] = (uid, username, is_admin, is_active)
             st.rerun()
+
+
+# ---------- Login simple para main.py ----------
+import streamlit as st
+try:
+    from db import authenticate_user, ensure_default_admin
+except Exception:
+    # Mantener compatibilidad si los nombres difieren
+    from db import ensure_default_admin
+    def authenticate_user(u, p):
+        try:
+            ok, user = _authenticate_user(u, p)  # type: ignore
+            return user if ok else None
+        except Exception:
+            return None
+
+def login_page():
+    st.title("Ingreso")
+
+    # Garantiza admin por defecto si no existe
+    try:
+        ensure_default_admin()
+    except Exception:
+        pass
+
+    username = st.text_input("Usuario")
+    password = st.text_input("Contraseña", type="password")
+
+    if st.button("Entrar"):
+        user_obj = None
+        try:
+            # si authenticate_user devuelve (ok, user)
+            result = authenticate_user(username.strip(), password.strip())
+            if isinstance(result, tuple) and len(result) == 2:
+                ok, user = result
+                user_obj = user if ok else None
+            else:
+                user_obj = result
+        except Exception:
+            user_obj = None
+
+        if user_obj and (user_obj.get("is_active", True)):
+            st.session_state["is_auth"] = True
+            st.session_state["user"] = {
+                "id": user_obj.get("id"),
+                "username": user_obj.get("username") or username.strip(),
+                "is_admin": bool(user_obj.get("is_admin", False)),
+            }
+            st.session_state["is_admin"] = bool(user_obj.get("is_admin", False))
+            st.rerun()
+        else:
+            st.error("Usuario/contraseña inválidos o inactivo.")
