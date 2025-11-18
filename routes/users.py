@@ -1,6 +1,11 @@
 
 import streamlit as st
-from db import ensure_default_admin, authenticate_user, authenticate_user_ci
+from db import ensure_default_admin, authenticate_user_ci
+# authenticate_user puede no existir en algunas versiones: import opcional
+try:
+    from db import authenticate_user  # type: ignore
+except Exception:
+    authenticate_user = None  # type: ignore
 
 def login_page():
     """Pantalla de ingreso (case-insensitive) con compatibilidad hacia atrás."""
@@ -27,10 +32,10 @@ def login_page():
         except Exception:
             user_obj = None
 
-        # 2) Fallback: authenticate_user con usuario normalizado
-        if not user_obj:
+        # 2) Fallback: authenticate_user con usuario normalizado (si existe)
+        if not user_obj and authenticate_user:
             try:
-                res = authenticate_user(uname_norm, pwd)
+                res = authenticate_user(uname_norm, pwd)  # type: ignore
                 if isinstance(res, tuple) and len(res) == 2:
                     ok, user = res
                     user_obj = user if ok else None
@@ -39,10 +44,10 @@ def login_page():
             except Exception:
                 user_obj = None
 
-        # 3) Fallback: authenticate_user con nombre tal cual
-        if not user_obj and username:
+        # 3) Fallback: authenticate_user con nombre tal cual (si existe)
+        if not user_obj and authenticate_user and username:
             try:
-                res = authenticate_user((username or "").strip(), pwd)
+                res = authenticate_user((username or "").strip(), pwd)  # type: ignore
                 if isinstance(res, tuple) and len(res) == 2:
                     ok, user = res
                     user_obj = user if ok else None
@@ -62,5 +67,3 @@ def login_page():
             st.rerun()
         else:
             st.error("Usuario/contraseña inválidos o inactivo.")
-
-# ---- A continuación permanece el resto de tu módulo (CRUD de usuarios, etc.) ----
