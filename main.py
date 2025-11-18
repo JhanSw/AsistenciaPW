@@ -10,7 +10,10 @@ if "db_init" not in st.session_state:
     try:
         init_database()
         ensure_default_admin()
-        ensure_audit_table(); ensure_import_batch_tables()
+        ensure_audit_table(); try:
+        ensure_import_batch_tables()
+    except Exception as e:
+        st.info(f"No se pudo inicializar DB automáticamente: {e}")
     except Exception as e:
         st.warning(f"No se pudo inicializar DB automáticamente: {e}")
     st.session_state["db_init"] = True
