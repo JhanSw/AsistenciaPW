@@ -132,6 +132,35 @@ def page():
 
     # Mostrar tabla
     st.dataframe(df)
+    
+            # --- Botón de exportar a Excel con la tabla visible ---
+            try:
+                prov_slug = _sanitize_filename_export(selected_region)
+            except Exception:
+                prov_slug = "ALL"
+            try:
+                muni_slug = _sanitize_filename_export(selected_municipality)
+            except Exception:
+                muni_slug = "ALL"
+            try:
+                enti_slug = _sanitize_filename_export(selected_entity)
+            except Exception:
+                enti_slug = "ALL"
+            try:
+                slot_slug = _sanitize_filename_export(slot)
+            except Exception:
+                slot_slug = "ALL"
+    
+            _file_prefix_export = f"personas_{prov_slug}"
+            if muni_slug != "ALL":
+                _file_prefix_export += f"_{muni_slug}"
+            if enti_slug != "ALL":
+                _file_prefix_export += f"_{enti_slug}"
+            if slot_slug != "ALL":
+                _file_prefix_export += f"_{slot_slug}"
+    
+            _export_xlsx_button_export(df, file_prefix=_file_prefix_export, sheet_name="Personas")
+            
 
     # Zona de selección granular
     st.markdown("#### Seleccionar personas")
@@ -193,3 +222,44 @@ def page():
             file_name="personas.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+
+# ================= Excel Export Helpers (added) =================
+import re as _re_export
+from io import BytesIO as _BytesIO_export
+import datetime as _dt_export
+import pandas as _pd_export
+
+def _sanitize_filename_export(text):
+    if text is None:
+        return "ALL"
+    if isinstance(text, (list, tuple)):
+        text = "-".join(map(str, text))
+    slug = _re_export.sub(r"[^A-Za-z0-9_-]+", "-", str(text)).strip("-").upper()
+    return slug or "ALL"
+
+def _export_xlsx_button_export(df_to_export, file_prefix="personas_filtradas", sheet_name="Personas", key="btn_export_xlsx"):
+    import streamlit as _st_export
+    if df_to_export is None or getattr(df_to_export, "empty", True):
+        _st_export.warning("No hay datos para exportar.")
+        return
+    buf = _BytesIO_export()
+    with _pd_export.ExcelWriter(buf, engine="openpyxl") as writer:
+        df_to_export.to_excel(writer, index=False, sheet_name=sheet_name)
+    buf.seek(0)
+    fname = f"{file_prefix}_{_dt_export.date.today().isoformat()}.xlsx"
+    _st_export.download_button(
+        "⬇️ Exportar a Excel",
+        data=buf,
+        file_name=fname,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key=key,
+    )
+
+# Oculta botón nativo de CSV del toolbar (opcional)
+import streamlit as _st_export_css
+_st_export_css.markdown(
+    "<style>button[title='Download data as CSV'],button[aria-label='Download data as CSV']{display:none!important;}</style>",
+    unsafe_allow_html=True
+)
+# ================================================================
