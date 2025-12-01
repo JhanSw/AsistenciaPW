@@ -1,5 +1,6 @@
 
 import io
+<<<<<<< HEAD
 import re
 import pandas as pd
 import streamlit as st
@@ -100,3 +101,102 @@ def page():
             )
     else:
         st.error(f"El certificado no es posible generarlo. Su porcentaje de asistencia es de {pct:.0f}% y el mínimo requerido es 75%.\n\nPara cualquier inquietud, comuníquese al correo remitente del enlace.")
+=======
+import datetime as dt
+import streamlit as st
+from db import find_person_by_document, get_attendance_status, SLOTS
+from PyPDF2 import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+
+TEMPLATE_PATH = "assets/certificate_template.pdf"
+
+def _compute_percentage(slot_status: dict) -> int:
+    if not slot_status:
+        return 0
+    total = len(SLOTS)
+    done = sum(1 for k in SLOTS if slot_status.get(k))
+    return int(round(done * 100 / total))
+
+def _make_overlay_pdf(width, height, full_name, document):
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(width, height))
+
+    # Texto centrado (ajusta coordenadas según tu diseño)
+    name_y = height * 0.58
+    doc_y = height * 0.48
+
+    c.setFont("Helvetica-Bold", 28)
+    c.drawCentredString(width/2.0, name_y, full_name)
+
+    c.setFont("Helvetica", 16)
+    c.drawCentredString(width/2.0, doc_y, f"C.C. {document}")
+    c.save()
+    buf.seek(0)
+    return buf
+
+def _merge_overlay(template_bytes: bytes, overlay_buf: io.BytesIO) -> bytes:
+    base = PdfReader(io.BytesIO(template_bytes))
+    out = PdfWriter()
+    overlay_reader = PdfReader(overlay_buf)
+    # asumir 1 página
+    page = base.pages[0]
+    page.merge_page(overlay_reader.pages[0])
+    out.add_page(page)
+    out_bytes = io.BytesIO()
+    out.write(out_bytes)
+    out_bytes.seek(0)
+    return out_bytes.getvalue()
+
+def page():
+    st.title("Certificados")
+
+    st.caption("Ingrese el documento para validar asistencia y generar su certificado (se requiere **75%** o más).")
+
+    document = st.text_input("Documento (sin puntos ni comas)").strip()
+    col1, col2 = st.columns([1,1])
+    generated = None
+
+    if col1.button("Validar y generar"):
+        if not document:
+            st.warning("Por favor ingrese un documento.")
+        else:
+            row = find_person_by_document(document)
+            if not row:
+                st.error("El documento no aparece en la base de datos. Si considera que es un error, escriba al correo desde el cual recibió el enlace.")
+            else:
+                person_id = row[0]
+                names = row[5] if len(row) > 5 else ""  # names suele estar en índice 5
+                # normaliza nombre
+                full_name = (names or "").strip().upper()
+
+                slots = get_attendance_status(person_id)
+                pct = _compute_percentage(slots)
+
+                if pct < 75:
+                    st.error(f"No es posible generar el certificado. Su porcentaje de asistencia es **{pct}%** y el mínimo requerido es **75%**. Para cualquier inquietud, escriba al correo desde el cual recibió el enlace.")
+                else:
+                    # generar PDF
+                    # leer plantilla
+                    with open(TEMPLATE_PATH, "rb") as f:
+                        template_bytes = f.read()
+
+                    # obtener tamaño del PDF
+                    reader = PdfReader(io.BytesIO(template_bytes))
+                    media = reader.pages[0].mediabox
+                    width = float(media.width)
+                    height = float(media.height)
+
+                    overlay = _make_overlay_pdf(width, height, full_name, document)
+                    result = _merge_overlay(template_bytes, overlay)
+
+                    st.success(f"¡Listo! Porcentaje de asistencia: **{pct}%**.")
+                    st.download_button(
+                        "Descargar certificado (PDF)",
+                        data=result,
+                        file_name=f"certificado_{document}.pdf",
+                        mime="application/pdf"
+                    )
+
+    st.info("Solo los participantes con 75% o más de asistencia pueden generar su certificado.")
+>>>>>>> 905d61f (update main)

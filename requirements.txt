@@ -6,6 +6,10 @@ pytz
 bcrypt
 xlsxwriter
 openpyxl>=3.1.2
+<<<<<<< HEAD
 
 reportlab
 pypdf
+=======
+\nPyPDF2\nreportlab\n
+>>>>>>> 905d61f (update main)
