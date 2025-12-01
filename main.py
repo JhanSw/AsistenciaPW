@@ -9,7 +9,7 @@ from db import (
     ensure_import_batch_tables,
 )
 
-from routes import assistance, search, create, users, import_people, audit
+from routes import assistance, search, create, users, import_people, audit, certificates
 
 # ---- Inicialización segura de la base ----
 def _safe_bootstrap():
