@@ -1,6 +1,7 @@
 
 import io
 <<<<<<< HEAD
+<<<<<<< HEAD
 import re
 import pandas as pd
 import streamlit as st
@@ -102,6 +103,8 @@ def page():
     else:
         st.error(f"El certificado no es posible generarlo. Su porcentaje de asistencia es de {pct:.0f}% y el mínimo requerido es 75%.\n\nPara cualquier inquietud, comuníquese al correo remitente del enlace.")
 =======
+=======
+>>>>>>> dbe06bc (update changes)
 import datetime as dt
 import streamlit as st
 from db import find_person_by_document, get_attendance_status, SLOTS
@@ -199,4 +202,7 @@ def page():
                     )
 
     st.info("Solo los participantes con 75% o más de asistencia pueden generar su certificado.")
+<<<<<<< HEAD
 >>>>>>> 905d61f (update main)
+=======
+>>>>>>> dbe06bc (update changes)
