@@ -1,14 +1,9 @@
-streamlit>=1.24
-psycopg2-binary
-pandas
-python-dotenv
-pytz
-bcrypt
-xlsxwriter
-openpyxl>=3.1.2
-reportlab
-<<<<<<< HEAD
-PyPDF2
-=======
-pypdf
->>>>>>> 19c2000 (fix error login)
+streamlit==1.39.0
+psycopg2-binary==2.9.9
+pandas==2.2.2
+python-dotenv==1.0.1
+pytz==2024.1
+bcrypt==4.1.2
+reportlab==4.2.2
+pypdf==4.3.1
+openpyxl==3.1.5
