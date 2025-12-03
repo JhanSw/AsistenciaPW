@@ -34,7 +34,7 @@ if "is_auth" not in st.session_state:
 if not st.session_state.get("is_auth"):
     users.login_page()
 else:
-    menu = st.sidebar.selectbox("Menú", ["Asistencia", "Buscar", "Nuevo", "Usuarios", "Importar", "Auditoría"])
+    menu = st.sidebar.selectbox("Menú", ["Asistencia", "Buscar", "Nuevo", "Usuarios", "Importar", "Auditoría", "Certificados"])
     if menu == "Asistencia":
         assistance.page()
     elif menu == "Buscar":

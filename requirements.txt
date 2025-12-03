@@ -7,4 +7,8 @@ bcrypt
 xlsxwriter
 openpyxl>=3.1.2
 reportlab
+<<<<<<< HEAD
 PyPDF2
+=======
+pypdf
+>>>>>>> 19c2000 (fix error login)
