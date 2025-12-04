@@ -1,3 +1,4 @@
+# routes/certificates.py
 import io
 import os
 import re
@@ -5,14 +6,15 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
-from reportlab.pdfgen import canvas
 from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase.pdfmetrics import stringWidth
 
-# -----------------------------
+# -------------------------------------------------------------------
 # Rutas y utilidades de archivo
-# -----------------------------
+# -------------------------------------------------------------------
 ASSETS_TEMPLATE = os.path.join("assets", "certificado_base.pdf")
-RUNTIME_CACHE = "/tmp/certificados_cache.parquet"   # donde guardamos el excel ya normalizado
+RUNTIME_CACHE = "/tmp/certificados_cache.parquet"  # cache del excel normalizado
 
 def _template_exists() -> bool:
     return os.path.exists(ASSETS_TEMPLATE)
@@ -31,7 +33,7 @@ def _load_registry() -> Optional[pd.DataFrame]:
             return pd.read_parquet(RUNTIME_CACHE)
         except Exception:
             pass
-    # fallback opcional por si subes un excel fijo a assets
+    # fallback: si dejas un excel fijo en assets
     assets_xlsx = os.path.join("assets", "certificados.xlsx")
     if os.path.exists(assets_xlsx):
         try:
@@ -41,30 +43,29 @@ def _load_registry() -> Optional[pd.DataFrame]:
             return None
     return None
 
-# -----------------------------
+# -------------------------------------------------------------------
 # Normalización de columnas
-# -----------------------------
+# -------------------------------------------------------------------
 def _only_digits(s: str) -> str:
     return re.sub(r"[^0-9]", "", str(s or ""))
 
 def _parse_percent(x) -> float:
     """
-    Toma cualquier celda que pueda venir como:
+    Acepta formatos como:
       - 75
       - "75 %"
       - "ASISTENCIA DEL 25%"
       - "25,5"
       - "25.5%"
-    Devuelve un float. Si no hay números, 0.0
+    Devuelve float; si no hay números, 0.0
     """
     if pd.isna(x):
         return 0.0
     s = str(x)
-    # busca TODOS los números en la cadena (soporta decimales con , o .)
+    # toma todos los números (con , o .)
     found = re.findall(r"\d+(?:[.,]\d+)?", s)
     if not found:
         return 0.0
-    # tomamos el último número detectado
     val = found[-1].replace(",", ".")
     try:
         return float(val)
@@ -75,64 +76,114 @@ def _normalize_registry(df: pd.DataFrame) -> pd.DataFrame:
     """
     Mapea columnas flexibles del excel a: document, names, percent
     """
-    # mapa flexible de nombres de columnas
+    # mapa flexible de nombres
     mapping = {
-        "document": ["documento", "doc", "id", "identificacion", "identificación", "cedula", "cédula", "no_documento", "document"],
-        "names":    ["nombre", "nombres", "nombre completo", "nombre_completo", "name", "names"],
-        "percent":  ["porcentaje", "asistencia", "pct", "%", "porc", "asistencia (%)", "asist", "asistencia del"]
+        "document": [
+            "documento", "doc", "id", "identificacion", "identificación",
+            "cedula", "cédula", "no_documento", "document"
+        ],
+        "names": [
+            "nombre", "nombres", "nombre completo", "nombre_completo",
+            "name", "names"
+        ],
+        "percent": [
+            "porcentaje", "asistencia", "pct", "%", "porc",
+            "asistencia (%)", "asist", "asistencia del"
+        ],
     }
-    # normalizamos keys
+
     cols_norm = {c: str(c).strip().lower() for c in df.columns}
     rename = {}
 
     for target, candidates in mapping.items():
         for orig, norm in cols_norm.items():
-            # coincidencia exacta o que contenga la palabra clave
             if norm in candidates or any(key in norm for key in candidates):
                 rename[orig] = target
                 break
 
     df = df.rename(columns=rename).copy()
 
-    # crea columnas faltantes
+    # columnas faltantes
     for need in ("document", "names", "percent"):
         if need not in df.columns:
             df[need] = None
 
-    # limpiar y tipar
+    # limpieza
     df["document"] = df["document"].map(_only_digits)
-    df["names"] = df["names"].astype(str).str.upper().str.replace(r"\s+", " ", regex=True).str.strip()
+    df["names"] = (
+        df["names"]
+        .astype(str)
+        .str.upper()
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
     df["percent"] = df["percent"].apply(_parse_percent)
 
-    # nos quedamos solo con lo necesario
     return df[["document", "names", "percent"]]
 
-# -----------------------------
-# Composición del PDF
-# -----------------------------
+# -------------------------------------------------------------------
+# Composición del PDF (overlay + merge)
+# -------------------------------------------------------------------
+
+# Posiciones y anchos relativos (ajustados al arte final)
+NAME_Y = 0.585     # altura del nombre (proporción de la altura)
+DOC_Y  = 0.495     # altura de la línea "C.C. 123..."
+NAME_MAX_W = 0.86  # ancho máximo utilizable para el nombre (proporción del ancho)
+DOC_MAX_W  = 0.70  # ancho máximo para el doc
+
+def _fit_text(text: str, font: str, base_size: int, max_w_px: float) -> int:
+    """
+    Reduce el tamaño hasta que quepa en max_w_px (en puntos PDF).
+    """
+    size = base_size
+    w = stringWidth(text, font, size)
+    while w > max_w_px and size > 10:  # evita que sea ilegible
+        size -= 1
+        w = stringWidth(text, font, size)
+    return size
+
 def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
     """
-    Dibuja nombre y documento sobre un canvas del tamaño w x h.
-    Ajusta posiciones si tu plantilla lo requiere.
+    Dibuja nombre y documento centrados en BLANCO y NEGRITA.
+    Autoajusta tamaño para evitar desbordes.
     """
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(w, h))
 
-    # posiciones (ajusta a tu plantilla)
-    y_name = h * 0.58
-    y_doc = h * 0.48
+    # Color BLANCO para ambos textos
+    c.setFillColorRGB(1, 1, 1)
 
-    c.setFont("Helvetica-Bold", 28)
-    c.drawCentredString(w/2, y_name, name)
+    # --- NOMBRE ---
+    name_font = "Helvetica-Bold"
+    name_size = _fit_text(
+        text=name,
+        font=name_font,
+        base_size=66,             # tamaño base (grande)
+        max_w_px=w * NAME_MAX_W,
+    )
+    c.setFont(name_font, name_size)
+    c.drawCentredString(w / 2.0, h * NAME_Y, name)
 
-    c.setFont("Helvetica", 16)
-    c.drawCentredString(w/2, y_doc, f"C.C. {doc}")
+    # --- DOCUMENTO ---
+    doc_text = f"C.C. {doc}"
+    doc_font = "Helvetica-Bold"
+    doc_size = _fit_text(
+        text=doc_text,
+        font=doc_font,
+        base_size=30,
+        max_w_px=w * DOC_MAX_W,
+    )
+    c.setFont(doc_font, doc_size)
+    c.drawCentredString(w / 2.0, h * DOC_Y, doc_text)
 
     c.save()
     buf.seek(0)
     return buf.read()
 
 def _render_certificate(name: str, doc: str) -> Optional[bytes]:
+    """
+    Mezcla la plantilla con el overlay y devuelve el PDF final en bytes.
+    """
     if not _template_exists():
         return None
 
@@ -151,9 +202,9 @@ def _render_certificate(name: str, doc: str) -> Optional[bytes]:
     out.seek(0)
     return out.read()
 
-# -----------------------------
+# -------------------------------------------------------------------
 # UI: PÚBLICO (sin login)
-# -----------------------------
+# -------------------------------------------------------------------
 def public_page():
     st.header("Certificados")
     if not _template_exists():
@@ -162,7 +213,7 @@ def public_page():
 
     df = _load_registry()
     if df is None or df.empty:
-        st.warning("Aún no hay datos de asistencia cargados. Intentelo más tarde.")
+        st.warning("Aún no hay datos de asistencia cargados. Inténtelo más tarde.")
         return
 
     doc_in = st.text_input("Documento (solo números)")
@@ -171,6 +222,7 @@ def public_page():
         if not num:
             st.warning("Ingrese un documento válido.")
             return
+
         row = df.loc[df["document"] == num]
         if row.empty:
             st.error("El documento no aparece en la base de datos. Si considera que es un error, escriba al correo desde el cual recibió el enlace.")
@@ -180,8 +232,11 @@ def public_page():
         pct = float(row.iloc[0]["percent"] or 0)
 
         if pct < 75:
-            st.error(f"No es posible generar el certificado. Su porcentaje de asistencia es **{pct:.0f}%** y el mínimo requerido es **75%**. "
-                     "Para cualquier inquietud, comuníquese al correo desde el cual recibió el enlace.")
+            st.error(
+                f"No es posible generar el certificado. Su porcentaje de asistencia es **{pct:.0f}%** "
+                "y el mínimo requerido es **75%**. Para cualquier inquietud, comuníquese al correo "
+                "desde el cual recibió el enlace."
+            )
             return
 
         pdf = _render_certificate(name, num)
@@ -194,14 +249,14 @@ def public_page():
             "Descargar certificado (PDF)",
             data=pdf,
             file_name=f"certificado_{num}.pdf",
-            mime="application/pdf"
+            mime="application/pdf",
         )
 
     st.caption("Solo podrán descargar quienes tengan 75% o más de asistencia.")
 
-# -----------------------------
-# UI: ADMIN (con login)
-# -----------------------------
+# -------------------------------------------------------------------
+# UI: ADMIN (con login, visible para ti)
+# -------------------------------------------------------------------
 def admin_page():
     st.header("Certificados · Configuración (Admin)")
 
@@ -235,6 +290,7 @@ def admin_page():
         if row.empty:
             st.warning("Documento no encontrado en el registro.")
             return
+
         name = str(row.iloc[0]["names"])
         pct = float(row.iloc[0]["percent"] or 0)
         st.write(f"Nombre: **{name}**, Asistencia: **{pct:.0f}%**")
@@ -246,10 +302,9 @@ def admin_page():
                     "Descargar certificado de prueba (PDF)",
                     data=pdf,
                     file_name=f"certificado_{num}.pdf",
-                    mime="application/pdf"
+                    mime="application/pdf",
                 )
             else:
                 st.error("No se pudo componer el PDF. Revise la plantilla.")
         else:
             st.warning("Este documento no alcanza el 75% mínimo.")
-
