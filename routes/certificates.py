@@ -9,6 +9,7 @@ import streamlit as st
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.lib.units import mm  # <- para usar milímetros
 
 # -------------------------------------------------------------------
 # Rutas y utilidades de archivo
@@ -125,12 +126,15 @@ def _normalize_registry(df: pd.DataFrame) -> pd.DataFrame:
 # Composición del PDF (overlay + merge)
 # -------------------------------------------------------------------
 
-# Posiciones y anchos relativos (ajustados al arte final)
-NAME_Y = 0.685     # altura del nombre (proporción de la altura)
-DOC_Y  = 0.6     # altura de la línea "C.C. 123..."
-NAME_MAX_W = 0.80  # ancho máximo utilizable para el nombre (proporción del ancho)
-DOC_MAX_W  = 0.8  # ancho máximo para el doc
-DOC_X_OFFSET = 0.012
+# Posiciones y límites relativos (ajustados al arte)
+NAME_Y = 0.685      # altura del nombre (proporción de h)
+DOC_Y  = 0.600      # altura del documento (proporción de h)
+NAME_MAX_W = 0.80   # ancho máx. utilizable para el nombre (proporción de w)
+DOC_MAX_W  = 0.80   # ancho máx. para documento (proporción de w)
+
+# Desplazamiento horizontal del documento en **milímetros**
+DOC_X_SHIFT_MM = 20.0    # <- 20 mm a la derecha
+DOC_X_SHIFT_PT = DOC_X_SHIFT_MM * mm  # mm → puntos PDF
 
 def _fit_text(text: str, font: str, base_size: int, max_w_px: float) -> int:
     """
@@ -145,8 +149,9 @@ def _fit_text(text: str, font: str, base_size: int, max_w_px: float) -> int:
 
 def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
     """
-    Dibuja nombre y documento centrados en BLANCO y NEGRITA.
-    Autoajusta tamaño para evitar desbordes.
+    Dibuja nombre y documento en BLANCO y NEGRITA.
+    - Nombre centrado.
+    - Documento centrado + desplazado 20 mm a la derecha.
     """
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(w, h))
@@ -159,14 +164,14 @@ def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
     name_size = _fit_text(
         text=name,
         font=name_font,
-        base_size=42,             # tamaño base (grande)
+        base_size=40,             # ajusta si quieres más pequeño
         max_w_px=w * NAME_MAX_W,
     )
     c.setFont(name_font, name_size)
     c.drawCentredString(w / 2.0, h * NAME_Y, name)
 
     # --- DOCUMENTO ---
-    doc_text = doc
+    doc_text = doc  # sin "C.C." porque ya está en la plantilla
     doc_font = "Helvetica-Bold"
     doc_size = _fit_text(
         text=doc_text,
@@ -175,7 +180,8 @@ def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
         max_w_px=w * DOC_MAX_W,
     )
     c.setFont(doc_font, doc_size)
-    c.drawCentredString(w / 2.0, h * DOC_Y, doc_text)
+    # centro + desplazamiento de 20 mm a la derecha
+    c.drawCentredString(w / 2.0 + DOC_X_SHIFT_PT, h * DOC_Y, doc_text)
 
     c.save()
     buf.seek(0)
