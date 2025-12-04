@@ -132,7 +132,7 @@ DOC_MAX_W  = 0.80   # ancho máx. para documento (proporción de w)
 
 # Desplazamientos en milímetros
 DOC_X_SHIFT_MM = 10.0   # + derecha / - izquierda
-DOC_Y_SHIFT_MM = 5.0    # + arriba / - abajo
+DOC_Y_SHIFT_MM = 4.5    # + arriba / - abajo
 
 # Convertir a puntos PDF
 DOC_X_SHIFT_PT = DOC_X_SHIFT_MM * mm
@@ -166,7 +166,7 @@ def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
     name_size = _fit_text(
         text=name,
         font=name_font,
-        base_size=40,             # ajusta si lo quieres más pequeño/grande
+        base_size=30,             # ajusta si lo quieres más pequeño/grande
         max_w_px=w * NAME_MAX_W,
     )
     c.setFont(name_font, name_size)
