@@ -133,7 +133,7 @@ NAME_MAX_W = 0.80   # ancho máx. utilizable para el nombre (proporción de w)
 DOC_MAX_W  = 0.80   # ancho máx. para documento (proporción de w)
 
 # Desplazamiento horizontal del documento en **milímetros**
-DOC_X_SHIFT_MM = 20.0    # <- 20 mm a la derecha
+DOC_X_SHIFT_MM = 15.0    # <- 15 mm a la derecha
 DOC_X_SHIFT_PT = DOC_X_SHIFT_MM * mm  # mm → puntos PDF
 
 def _fit_text(text: str, font: str, base_size: int, max_w_px: float) -> int:
@@ -164,7 +164,7 @@ def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
     name_size = _fit_text(
         text=name,
         font=name_font,
-        base_size=40,             # ajusta si quieres más pequeño
+        base_size=35,             # ajusta si quieres más pequeño
         max_w_px=w * NAME_MAX_W,
     )
     c.setFont(name_font, name_size)
