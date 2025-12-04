@@ -126,8 +126,8 @@ def _normalize_registry(df: pd.DataFrame) -> pd.DataFrame:
 # -------------------------------------------------------------------
 
 # Posiciones y anchos relativos (ajustados al arte final)
-NAME_Y = 0.585     # altura del nombre (proporción de la altura)
-DOC_Y  = 0.495     # altura de la línea "C.C. 123..."
+NAME_Y = 0.7     # altura del nombre (proporción de la altura)
+DOC_Y  = 0.6     # altura de la línea "C.C. 123..."
 NAME_MAX_W = 0.86  # ancho máximo utilizable para el nombre (proporción del ancho)
 DOC_MAX_W  = 0.70  # ancho máximo para el doc
 
@@ -158,19 +158,19 @@ def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
     name_size = _fit_text(
         text=name,
         font=name_font,
-        base_size=66,             # tamaño base (grande)
+        base_size=56,             # tamaño base (grande)
         max_w_px=w * NAME_MAX_W,
     )
     c.setFont(name_font, name_size)
     c.drawCentredString(w / 2.0, h * NAME_Y, name)
 
     # --- DOCUMENTO ---
-    doc_text = f"C.C. {doc}"
+    doc_text = doc
     doc_font = "Helvetica-Bold"
     doc_size = _fit_text(
         text=doc_text,
         font=doc_font,
-        base_size=30,
+        base_size=20,
         max_w_px=w * DOC_MAX_W,
     )
     c.setFont(doc_font, doc_size)
