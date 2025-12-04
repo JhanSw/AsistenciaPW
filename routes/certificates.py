@@ -126,13 +126,17 @@ def _normalize_registry(df: pd.DataFrame) -> pd.DataFrame:
 
 # Posiciones y límites relativos (ajustados al arte)
 NAME_Y = 0.685      # altura del nombre (proporción de h)
-DOC_Y  = 0.600      # altura del documento (proporción de h)
+DOC_Y  = 0.600      # altura base del documento (proporción de h)
 NAME_MAX_W = 0.80   # ancho máx. utilizable para el nombre (proporción de w)
 DOC_MAX_W  = 0.80   # ancho máx. para documento (proporción de w)
 
-# Desplazamiento horizontal del documento en milímetros (solo X)
+# Desplazamientos en milímetros
 DOC_X_SHIFT_MM = 10.0   # + derecha / - izquierda
+DOC_Y_SHIFT_MM = 4.5    # + arriba / - abajo
+
+# Convertir a puntos PDF
 DOC_X_SHIFT_PT = DOC_X_SHIFT_MM * mm
+DOC_Y_SHIFT_PT = DOC_Y_SHIFT_MM * mm
 
 def _fit_text(text: str, font: str, base_size: int, max_w_px: float) -> int:
     """
@@ -149,7 +153,7 @@ def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
     """
     Dibuja nombre y documento en BLANCO y NEGRITA.
     - Nombre centrado.
-    - Documento centrado + desplazamiento en X (mm).
+    - Documento centrado + desplazamientos X/Y en mm.
     """
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(w, h))
@@ -162,7 +166,7 @@ def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
     name_size = _fit_text(
         text=name,
         font=name_font,
-        base_size=40,             # ajusta si lo quieres más pequeño/grande
+        base_size=30,             # ajusta si lo quieres más pequeño/grande
         max_w_px=w * NAME_MAX_W,
     )
     c.setFont(name_font, name_size)
@@ -178,8 +182,12 @@ def _overlay_bytes(name: str, doc: str, w: float, h: float) -> bytes:
         max_w_px=w * DOC_MAX_W,
     )
     c.setFont(doc_font, doc_size)
-    # Centro + desplazamiento horizontal (mm)
-    c.drawCentredString((w / 2.0) + DOC_X_SHIFT_PT, h * DOC_Y, doc_text)
+    # Centro + desplazamientos de 10 mm a la derecha y 5 mm hacia arriba
+    c.drawCentredString(
+        (w / 2.0) + DOC_X_SHIFT_PT,
+        (h * DOC_Y) + DOC_Y_SHIFT_PT,
+        doc_text
+    )
 
     c.save()
     buf.seek(0)
